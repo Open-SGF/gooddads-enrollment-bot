@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 use mikehaertl\pdftk\Pdf;
 
-class PdfFillFields extends Command
+final class PdfFillFields extends Command
 {
     protected $signature = 'pdf:fill-fields';
 

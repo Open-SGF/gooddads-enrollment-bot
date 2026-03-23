@@ -1,10 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\DTOs;
 
-use App\Contracts\PdfArrayable;
-
-readonly class SurveyDTO
+final readonly class SurveyDTO
 {
     public function __construct(
         public readonly string $clientDob,
@@ -17,17 +17,17 @@ readonly class SurveyDTO
         public readonly string $gainOther,
     ) {}
 
-    public function toPdfArray(): array {
+    public function toPdfArray(): array
+    {
         return [
-            'survey_client_dob'             => $this->clientDob,
-            'survey_delivery_method'        => $this->deliveryMethod,
-            'survey_why'                    => $this->why,
-            'survey_other_description'      => $this->whyOther,
-            'survey_how'                    => $this->how,
-            'survey_how_other_description'  => $this->howOther,
-            'survey_gain'                   => $this->gain,
-            'survey_gain_other_description' => $this->gainOther
+            'survey_client_dob' => $this->clientDob,
+            'survey_delivery_method' => $this->deliveryMethod,
+            'survey_why' => $this->why,
+            'survey_other_description' => $this->whyOther,
+            'survey_how' => $this->how,
+            'survey_how_other_description' => $this->howOther,
+            'survey_gain' => $this->gain,
+            'survey_gain_other_description' => $this->gainOther,
         ];
     }
 }
-?>

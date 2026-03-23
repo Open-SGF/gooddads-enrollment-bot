@@ -1,16 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
+use App\Jobs\GenerateParticipantPdfJob;
+use App\Models\NeonHash;
 use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
-use App\Jobs\GenerateParticipantPdfJob; 
-use App\Models\NeonHash;
-use Carbon\Carbon;
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
-class PollNeonParticipants extends Command
+final class PollNeonParticipants extends Command
 {
     /**
      * The name and signature of the console command.
@@ -42,20 +43,19 @@ class PollNeonParticipants extends Command
      */
     public function handle()
     {
-        
+
         $participantIds = $this->neonApi->getTodaysParticipantIds();
-   
+
         foreach ($participantIds as $participantId) {
             // Get the full participant record
-            $fullRecord = $this->neonApi->buildFullParticipantRecord($participantId);   
-
+            $fullRecord = $this->neonApi->buildFullParticipantRecord($participantId);
 
             // Create a hash of the full record
             $hash = hash('sha256', json_encode($fullRecord));
 
             // Check if hash already exists
-            if (!NeonHash::where('id', $hash)->exists()) {
-                Log::info("Participant ". $participantId . " has updated data. Queuing pdf regeneration.");
+            if (! NeonHash::where('id', $hash)->exists()) {
+                Log::info('Participant '.$participantId.' has updated data. Queuing pdf regeneration.');
                 // Store the hash for the participant data for future comparison
                 NeonHash::create(['id' => $hash]);
 
@@ -64,7 +64,7 @@ class PollNeonParticipants extends Command
                 // Queue the pdf generation job
                 dispatch(new GenerateParticipantPdfJob($serializableDTOs));
             } else {
-                Log::info("Participant ". $participantId . " has no updated data. Skipping pdf regeneration.");
+                Log::info('Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
             }
         }
 

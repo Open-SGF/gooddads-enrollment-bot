@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\DTOs;
 
 use App\Contracts\PdfArrayable;
 
-readonly class ContactInfoDTO implements PdfArrayable
+final readonly class ContactInfoDTO implements PdfArrayable
 {
     public function __construct(
         public readonly string $titleRegion,
@@ -12,7 +14,7 @@ readonly class ContactInfoDTO implements PdfArrayable
         public readonly string $enteredDate,
         public readonly string $address,
         public readonly string $employer,
-        public readonly string $tshirtSize,                   
+        public readonly string $tshirtSize,
         public readonly string $phone,
         public readonly string $workPhone,
         public readonly string $otherPhone,
@@ -31,26 +33,25 @@ readonly class ContactInfoDTO implements PdfArrayable
     public function toPdfArray(): array
     {
         return [
-            'title_region'                                      => $this->titleRegion,
-            'full_name'                                         => $this->fullName,
-            'entered_date'                                      => $this->enteredDate,
-            'address'                                           => $this->address,
-            'employer'                                          => $this->employer,
-            'tshirt_size'                                       => $this->tshirtSize,
-            'phone'                                             => $this->phone,
-            'work_phone'                                        => $this->workPhone,
-            'other_phone'                                       => $this->otherPhone,
-            'email'                                             => $this->email,
-            'case_worker_name'                                  => $this->caseworkerName,
-            'case_worker_phone'                                 => $this->caseworkerPhone,
-            'monthly_child_support'                             => $this->monthlyChildSupport,
-            'marital_status'                                    => $this->maritalStatus,
-            'ethnicity'                                         => $this->ethnicity,
-            'contact_with_children'                             => $this->contactWithChildren,
-            'children_custody'                                  => $this->childrenCustody,
-            'children_visitation'                               => $this->childrenVisitation,
-            'children_phone'                                    => $this->childrenPhone,
+            'title_region' => $this->titleRegion,
+            'full_name' => $this->fullName,
+            'entered_date' => $this->enteredDate,
+            'address' => $this->address,
+            'employer' => $this->employer,
+            'tshirt_size' => $this->tshirtSize,
+            'phone' => $this->phone,
+            'work_phone' => $this->workPhone,
+            'other_phone' => $this->otherPhone,
+            'email' => $this->email,
+            'case_worker_name' => $this->caseworkerName,
+            'case_worker_phone' => $this->caseworkerPhone,
+            'monthly_child_support' => $this->monthlyChildSupport,
+            'marital_status' => $this->maritalStatus,
+            'ethnicity' => $this->ethnicity,
+            'contact_with_children' => $this->contactWithChildren,
+            'children_custody' => $this->childrenCustody,
+            'children_visitation' => $this->childrenVisitation,
+            'children_phone' => $this->childrenPhone,
         ];
     }
 }
-?>
