@@ -17,7 +17,33 @@
 - Navigate to the project directory and run `composer install`
 - Duplicate the .env.example: `cp .env.example .env`
 - Configure alias for sail: `alias sail='sh $([ -f sail ] && echo sail || echo vendor/bin/sail)'`
-- Generate a new APP_KEY: `sail artisan key:generate`. This will automatically update the .env file for the APP_KEY value.
 - Start the Docker containers: `sail up -d`
 - Wait for the containers to start up. You can check the status of the containers with `sail ps`
+- Generate a new APP_KEY: `sail artisan key:generate`. This will automatically update the .env file for the APP_KEY value.
+- Create the database tables: `sail artisan migrate`
+
+## Project reset
+If you are stuck or Laravel is stuck. 
+- **USE WITH CAUTION, THIS IS A HARD RESET OF THE DOCKER CONTAINERS**: `sail down -v --rmi all --remove-orphans`
+- Start the Docker containers: `sail up -d`
+- Wait for the containers to start up. You can check the status of the containers witj `sail ps`
+- Create the database tables: `sail artisan migrate`
+
+## Poll Neon
+### Clean-up and log monitoring
+- Flush the queue: `sail artisan queue:flush`
+- Clear the queue: `sail artisan queue:clear`
+- Clear the hash-table and failed jobs table:
+    - Start MySQL terminal: `sail artisan tinker`
+    - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`
+    - Clear failed jobs-table: `DB::table('failed_jobs')->truncate();`
+    - Exit MySQL terminal: `exit`
+- Reset the laravel log file (RHEL/Almalinux syntax): `> storage/logs/laravel.log`
+- Monitor the laravel log file (RHEL/Almalinux syntax): `tail -f storage/logs/laravel.log`
+
+### Start worker
+- Start single-try worker (adjust --tries as needed): `sail artisan queue:work --tries=1`
+
+### Poll Neon
+- Poll neon with high verbosity (-vvv): `sail artisan neon:poll-participants -vvv`
 
