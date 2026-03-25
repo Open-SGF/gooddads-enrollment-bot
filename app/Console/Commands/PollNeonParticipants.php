@@ -55,19 +55,22 @@ final class PollNeonParticipants extends Command
 
             // Check if hash already exists
             if (! NeonHash::where('id', $hash)->exists()) {
-                Log::info('Participant '.$participantId.' has updated data. Queuing pdf regeneration.');
+                Log::info('✅ Participant '.$participantId.' has updated data.');
                 // Store the hash for the participant data for future comparison
+                Log::info('🔄 Generating hash....');
                 NeonHash::create(['id' => $hash]);
 
+                Log::info('🔄 Transforming participant data to serializable DTO');
                 // Transform the participant data into serializable DTOs
                 $serializableDTOs = NeonDTOTransformer::transformParticipantData($fullRecord);
                 // Queue the pdf generation job
+                Log::info('📬 Queing pdf regeneration');
                 dispatch(new GenerateParticipantPdfJob($serializableDTOs));
             } else {
-                Log::info('Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
+                Log::info('⏭️ Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
             }
         }
 
-        $this->info('Polling complete.');
+        $this->info('✅ Polling complete.');
     }
 }

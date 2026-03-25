@@ -11,7 +11,7 @@ final readonly class ParticipantUpdateData
      */
     public function __construct(
         // Meta (not PDF fields, used for file generation)
-        public readonly int $id,
+        public readonly string $id,
         public readonly string $firstName,
         public readonly string $lastName,
 

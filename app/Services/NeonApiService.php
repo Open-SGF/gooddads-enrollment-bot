@@ -24,11 +24,11 @@ final class NeonApiService
     public function getTodaysParticipantIds(): array
     {
         $todaysDate = Carbon::today('America/Chicago')->format('Y-m-d');
-        $todaysDate = '2026-02-24';
-        Log::info("Collecting participant records that have been added or updated today - {$todaysDate}....");
+        // $todaysDate = '2026-02-24';
+        Log::info("🔍 Collecting participant records that have been added or updated today - {$todaysDate}....");
         $toReturn = $this->getParticipantIdsByDate($todaysDate);
         $count = count($toReturn);
-        Log::info("Found {$count} new or updated participant records.");
+        Log::info("📋 Found {$count} new or updated participant records.");
 
         return $toReturn;
     }
@@ -98,7 +98,7 @@ final class NeonApiService
         return $response->json();
     }
 
-    public function fetchPersonContactInfo(int $personId, bool $useWhereClause): array
+    public function fetchPersonContactInfo(string $personId, bool $useWhereClause): array
     {
         return $this->fetch("persons/{$personId}", [
             'firstName',
@@ -123,10 +123,10 @@ final class NeonApiService
             'monthlyChildSupportPayment',
             'maritalStatus',
             'ethnicity',
-        ], $useWhereClause);
+        ], $personId, $useWhereClause);
     }
 
-    public function fetchPersonChildren(int $personId, bool $useWhereClause): array
+    public function fetchPersonChildren(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_applications_children', [
             'firstName',
@@ -136,7 +136,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
-    public function fetchPersonDisclosure(int $personId, bool $useWhereClause): array
+    public function fetchPersonDisclosure(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_applications', [
             'persons_id',
@@ -161,7 +161,7 @@ final class NeonApiService
             $useWhereClause);
     }
 
-    public function fetchPersonAssessment(int $personId, bool $useWhereClause): array
+    public function fetchPersonAssessment(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_assessment_worksheet', [
             'persons_id',
@@ -184,7 +184,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
-    public function fetchPersonSurvey(int $personId, bool $useWhereClause): array
+    public function fetchPersonSurvey(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_introductory_survey', [
             'persons_id',
@@ -199,7 +199,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
-    public function fetchPersonServicePlan(int $personId, bool $useWhereClause): array
+    public function fetchPersonServicePlan(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_service_plan', [
             'persons_id',
@@ -259,7 +259,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
-    public function buildFullParticipantRecord(int $personId): array
+    public function buildFullParticipantRecord(string $personId): array
     {
         return [
             'contactInfo' => $this->fetchPersonContactInfo($personId, false),
@@ -271,7 +271,7 @@ final class NeonApiService
         ];
     }
 
-    private function fetch(string $endpoint, array $fields = [], ?int $personId = null, bool $useWhereClause = true): array
+    private function fetch(string $endpoint, array $fields = [], ?string $personId = null, bool $useWhereClause = true): array
     {
         $url = "{$this->baseUrl}/data/{$endpoint}";
 

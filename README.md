@@ -33,6 +33,7 @@ If you are stuck or Laravel is stuck.
 ### Clean-up and log monitoring
 - Flush the queue: `sail artisan queue:flush`
 - Clear the queue: `sail artisan queue:clear`
+- Reset the queue: `sail artisan queue:reset`
 - Clear the hash-table and failed jobs table:
     - Start MySQL terminal: `sail artisan tinker`
     - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`
