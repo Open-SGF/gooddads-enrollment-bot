@@ -45,12 +45,17 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             // $participant = $transformer->transformPerson($fullRecord);
 
             // Generate the PDF
+            Log::info('🔄 Generating PDF.');
             $pdfPath = $pdfService->generate($this->updatedParticipantData);
+            Log::info('✅ PDF-generation complete');
 
             // Upload to Dropbox
-            Log::info('📤 Uploading PDF to Dropbox for participant '.$this->updatedParticipantData->id);
-            $dropboxService->upload(Storage::path($pdfPath), $pdfPath);
-            Log::info('✅ Dropbox upload complete.');
+            try {
+                $dropboxService->upload(Storage::path($pdfPath), $pdfPath);
+                Log::info('✅ Dropbox upload complete.');
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
+            }
 
             // Send email
             Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
