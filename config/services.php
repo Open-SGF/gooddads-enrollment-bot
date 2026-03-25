@@ -42,4 +42,9 @@ return [
         'api_key' => env('NEON_API_KEY'),
     ],
 
+    'dropbox' => [
+        'access_token' => env('DROPBOX_ACCESS_TOKEN'),
+        'upload_path' => env('DROPBOX_UPLOAD_PATH', '/uploads'),
+    ],
+
 ];
