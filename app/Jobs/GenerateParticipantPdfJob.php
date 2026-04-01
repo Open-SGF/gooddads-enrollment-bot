@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\DTOs\ParticipantUpdateData;
 use App\Mail\IntakeFormMailable;
+use App\Services\DropboxUploadService;
 use App\Services\PdfIntakeFormService;
 use Exception;
 use Illuminate\Bus\Queueable;
@@ -16,6 +17,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
 final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
 {
@@ -34,7 +36,8 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
      * Execute the job.
      */
     public function handle(
-        PdfIntakeFormService $pdfService
+        PdfIntakeFormService $pdfService,
+        DropboxUploadService $dropboxService
     ) {
         try {
             // Fetch and transform participant data
@@ -42,7 +45,17 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             // $participant = $transformer->transformPerson($fullRecord);
 
             // Generate the PDF
+            Log::info('🔄 Generating PDF.');
             $pdfPath = $pdfService->generate($this->updatedParticipantData);
+            Log::info('✅ PDF-generation complete');
+
+            // Upload to Dropbox
+            try {
+                $dropboxService->upload(Storage::path($pdfPath), $pdfPath);
+                Log::info('✅ Dropbox upload complete.');
+            } catch (\Exception $e) {
+                Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
+            }
 
             // Send email
             Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
