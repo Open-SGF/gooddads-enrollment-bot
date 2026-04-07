@@ -31,9 +31,13 @@ If you are stuck or Laravel is stuck.
 
 ## Poll Neon
 ### Clean-up and log monitoring
+- Clear configs: `sail artisan config:clear`
+- Clear cache: `sail artisan cache:clear`
+- Clear routes: `sail artisan route:clear`
+- Regenerate autoloader files: `sail composer dump-autoload`
 - Flush the queue: `sail artisan queue:flush`
 - Clear the queue: `sail artisan queue:clear`
-- Reset the queue: `sail artisan queue:reset`
+- Restart the queue: `sail artisan queue:restart`
 - Clear the hash-table and failed jobs table:
     - Start MySQL terminal: `sail artisan tinker`
     - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`

@@ -60,15 +60,21 @@ final class NeonDTOTransformer
         );
     }
 
-    /** @return ChildDTO[]    */
+    /** @return ChildDTO[] */
     private static function transformChildren(array $children): array
     {
         $result = [];
         foreach ($children as $child) {
             $dob = self::parseDate($child['dateOfBirth']['value'] ?? null);
+            $ageInYears = $dob?->diffInYears(Carbon::now());
+
             $result[] = new ChildDTO(
                 name: mb_trim(($child['firstName']['value'] ?? '').' '.($child['lastName']['value'] ?? '')),
-                age: $dob ? (string) $dob->diffInYears(Carbon::now()) : '',
+                age: match (true) {
+                    $ageInYears === null => '',
+                    $ageInYears < 1     => 'Under 1',
+                    default             => (string) $ageInYears,
+                },
                 dob: $dob ? $dob->format('m/d/Y') : '',
             );
         }
@@ -220,18 +226,18 @@ final class NeonDTOTransformer
             clientNumber: $sp['clientNumber']['value'] ?? '',
             goal: '', // database appears to be missing this field per original comment
             serviceIdentified: $sp['serviceIdentifiedByTheParticipants']['value'] ?? '',
-            strategies_1: $sp['goals_custodyVisitationObj']['displayValue'] ?? '',
-            personResponsible_1: $sp['goals_custodyVisitationPersonRes']['displayValue'] ?? '',
-            timeline_1: $sp['goals_custodyVisitationTimeline']['displayValue'] ?? '',
-            measureOfSuccess_1: $sp['goals_custodyVisitationMeasure']['value'] ?? '',
-            strategies_2: $sp['goals_educationEmploymentObj']['displayValue'] ?? '',
-            personResponsible_2: $sp['goals_educationEmploymentPersonRes']['displayValue'] ?? '',
-            timeline_2: $sp['goals_educationEmploymentTimeline']['displayValue'] ?? '',
-            measureOfSuccess_2: $sp['goals_educationEmploymentMeasure']['value'] ?? '',
-            strategies_3: $sp['goals_housingTransportationObj']['displayValue'] ?? '',
-            personResponsible_3: $sp['goals_housingTransportationPersonRes']['displayValue'] ?? '',
-            timeline_3: $sp['goals_housingTransportationTimeline']['displayValue'] ?? '',
-            measureOfSuccess_3: $sp['goals_housingTransportationMeasure']['value'] ?? '',
+            strategies1: $sp['goals_custodyVisitationObj']['displayValue'] ?? '',
+            personResponsible1: $sp['goals_custodyVisitationPersonRes']['displayValue'] ?? '',
+            timeline1: $sp['goals_custodyVisitationTimeline']['displayValue'] ?? '',
+            measureOfSuccess1: $sp['goals_custodyVisitationMeasure']['value'] ?? '',
+            strategies2: $sp['goals_educationEmploymentObj']['displayValue'] ?? '',
+            personResponsible2: $sp['goals_educationEmploymentPersonRes']['displayValue'] ?? '',
+            timeline2: $sp['goals_educationEmploymentTimeline']['displayValue'] ?? '',
+            measureOfSuccess2: $sp['goals_educationEmploymentMeasure']['value'] ?? '',
+            strategies3: $sp['goals_housingTransportationObj']['displayValue'] ?? '',
+            personResponsible3: $sp['goals_housingTransportationPersonRes']['displayValue'] ?? '',
+            timeline3: $sp['goals_housingTransportationTimeline']['displayValue'] ?? '',
+            measureOfSuccess3: $sp['goals_housingTransportationMeasure']['value'] ?? '',
         );
     }
 
