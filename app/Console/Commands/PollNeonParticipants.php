@@ -8,10 +8,9 @@ use App\Jobs\GenerateParticipantPdfJob;
 use App\Models\NeonHash;
 use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
-use App\Mail\IncompleteIntakeFormMailable;
+
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 final class PollNeonParticipants extends Command
 {
@@ -66,19 +65,9 @@ final class PollNeonParticipants extends Command
                 // Transform the participant data into serializable DTOs
                 $participantData = NeonDTOTransformer::transformParticipantData($fullRecord);
 
-                // Check if the required participant form fields are filled
-                if (! $participantData->hasMissingFields()) {
-                    // Queue the pdf generation job
-                    Log::info('📬 Queing pdf regeneration');
-                    dispatch(new GenerateParticipantPdfJob($participantData));
-                } else {
-                    // Send email
-                    Log::info('📧 Sending email notification about incomplete intake form for participant ' . $participantData->id);
-                    Mail::to('hello@example.com')
-                        ->send(new IncompleteIntakeFormMailable($participantData, $participantData->getMissingFields()));
-                    Log::info('✅ Incomplete intake form email sent.');
-
-                }
+                 // Queue the pdf generation job
+                Log::info('📬 Queing pdf regeneration');
+                dispatch(new GenerateParticipantPdfJob($participantData));
                 
             } else {
                 Log::info('⏭️ Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
