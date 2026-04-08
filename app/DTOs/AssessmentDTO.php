@@ -32,17 +32,8 @@ readonly class AssessmentDTO extends AbstractPdfDTO
             'dob',
             'eligibilityMissouriResident',
             'eligibilityChildUnder18',
-            'financialEligibility',
-            'financialDriversLicence',
-            'financialUtilityBill',
-            'financialWrittenEmployerStatement',
-            'financialSsBenefitsStatement',
-            'financialNoEmploymentIncome',
-            'financialUnemploymentCompensation',
-            'financialOther',
             'povertyMonthlyIncome',
-            'povertyHouseholdMembers',
-            'povertyPercentageFpl',
+            'povertyHouseholdMembers'
         ];
     }
 

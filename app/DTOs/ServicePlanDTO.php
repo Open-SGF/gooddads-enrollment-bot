@@ -28,10 +28,7 @@ readonly class ServicePlanDTO extends AbstractPdfDTO
     protected function mandatoryFields(): array
     {
         return [
-            'participantFullName',
-            'clientNumber',
-            'goal',
-            'serviceIdentified',
+            'participantFullName'
         ];
     }
 

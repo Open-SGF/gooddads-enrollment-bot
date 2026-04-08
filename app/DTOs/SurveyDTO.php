@@ -19,10 +19,26 @@ readonly class SurveyDTO extends AbstractPdfDTO
 
     protected function mandatoryFields(): array
     {
-        return [
-            'clientDob',
-            'deliveryMethod',
-        ];
+        return [];
+    }
+
+    public function getMissingFields(): array
+    {
+        $missing = parent::getMissingFields();
+
+        if (empty($this->why) && empty($this->whyOther)) {
+            $missing[] = 'why (or whyOther)';
+        }
+
+        if (empty($this->how) && empty($this->howOther)) {
+            $missing[] = 'how (or howOther)';
+        }
+
+        if (empty($this->gain) && empty($this->gainOther)) {
+            $missing[] = 'gain (or gainOther)';
+        }
+
+        return $missing;
     }
 
     public function toPdfArray(): array
