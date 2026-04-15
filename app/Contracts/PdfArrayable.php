@@ -8,3 +8,5 @@ interface PdfArrayable
 {
     public function toPdfArray(): array;
 }
+
+?>

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\DTOs;
 
+use Illuminate\Support\Facades\Log;
+
 final readonly class ParticipantUpdateData
 {
     /**
@@ -55,5 +57,48 @@ final readonly class ParticipantUpdateData
         ];
 
         return array_merge(...$arrays);
+    }
+
+    public function getMissingFields(): array
+    {
+        $missing = [];
+
+        $dtos = [
+            'contactInfo' => $this->contactInfo,
+            'disclosure'  => $this->disclosure,
+            'assessment'  => $this->assessment,
+            'survey'      => $this->survey,
+            'servicePlan' => $this->servicePlan,
+        ];
+
+        foreach ($dtos as $name => $dto) {
+            if ($dto->hasMissingFields()) {
+                $missing[$name] = $dto->getMissingFields();
+            }
+        }
+
+        if (empty($this->children)) {
+            $missing['children'] = ['children array is empty'];
+        } else {
+            foreach ($this->children as $index => $child) {
+                if ($child->hasMissingFields()) {
+                    $missing["child_{$index}"] = $child->getMissingFields();
+                }
+            }
+        }
+
+        if (!empty($missing)) {
+            Log::warning('ParticipantUpdateData: missing fields detected', [
+                'participant_id' => $this->id,
+                'missing'        => $missing,
+            ]);
+        }
+
+        return $missing;
+    }
+
+    public function hasMissingFields(): bool
+    {
+        return !empty($this->getMissingFields());
     }
 }

@@ -8,6 +8,7 @@ use App\Jobs\GenerateParticipantPdfJob;
 use App\Models\NeonHash;
 use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
+
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
@@ -62,10 +63,12 @@ final class PollNeonParticipants extends Command
 
                 Log::info('🔄 Transforming participant data to serializable DTO');
                 // Transform the participant data into serializable DTOs
-                $serializableDTOs = NeonDTOTransformer::transformParticipantData($fullRecord);
-                // Queue the pdf generation job
+                $participantData = NeonDTOTransformer::transformParticipantData($fullRecord);
+
+                 // Queue the pdf generation job
                 Log::info('📬 Queing pdf regeneration');
-                dispatch(new GenerateParticipantPdfJob($serializableDTOs));
+                dispatch(new GenerateParticipantPdfJob($participantData));
+                
             } else {
                 Log::info('⏭️ Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
             }

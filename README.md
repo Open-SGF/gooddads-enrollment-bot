@@ -31,16 +31,21 @@ If you are stuck or Laravel is stuck.
 
 ## Poll Neon
 ### Clean-up and log monitoring
-- Flush the queue: `sail artisan queue:flush`
-- Clear the queue: `sail artisan queue:clear`
-- Reset the queue: `sail artisan queue:reset`
-- Clear the hash-table and failed jobs table:
-    - Start MySQL terminal: `sail artisan tinker`
-    - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`
-    - Clear failed jobs-table: `DB::table('failed_jobs')->truncate();`
-    - Exit MySQL terminal: `exit`
-- Reset the laravel log file (RHEL/Almalinux syntax): `> storage/logs/laravel.log`
-- Monitor the laravel log file (RHEL/Almalinux syntax): `tail -f storage/logs/laravel.log`
+- Run `bash reset-queue.sh` which does the following:
+    - Clear configs: `sail artisan config:clear`
+    - Clear cache: `sail artisan cache:clear`
+    - Clear routes: `sail artisan route:clear`
+    - Regenerate autoloader files: `sail composer dump-autoload`
+    - Flush the queue: `sail artisan queue:flush`
+    - Clear the queue: `sail artisan queue:clear`
+    - Restart the queue: `sail artisan queue:restart`
+    - Clear the hash-table and failed jobs table:
+        - Start MySQL terminal: `sail artisan tinker`
+        - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`
+        - Clear failed jobs-table: `DB::table('failed_jobs')->truncate();`
+        - Exit MySQL terminal: `exit`
+    - Reset the laravel log file (RHEL/Almalinux syntax): `> storage/logs/laravel.log`
+    - Monitor the laravel log file (RHEL/Almalinux syntax): `tail -f storage/logs/laravel.log`
 
 ### Start worker
 - Start single-try worker (adjust --tries as needed): `sail artisan queue:work --tries=1`

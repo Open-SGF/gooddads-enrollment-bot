@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\DTOs\ParticipantUpdateData;
 use App\Mail\IntakeFormMailable;
+use App\Mail\IncompleteIntakeFormMailable;
 use App\Services\DropboxUploadService;
 use App\Services\PdfIntakeFormService;
 use Exception;
@@ -49,19 +50,30 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             $pdfPath = $pdfService->generate($this->updatedParticipantData);
             Log::info('✅ PDF-generation complete');
 
-            // Upload to Dropbox
-            try {
-                $dropboxService->upload(Storage::path($pdfPath), $pdfPath);
-                Log::info('✅ Dropbox upload complete.');
-            } catch (\Exception $e) {
-                Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
-            }
+            // Check if the required participant form fields are filled
+            if ($this->updatedParticipantData->hasMissingFields()) {                    
+                // Send email
+                Log::info('📧 Sending email notification about incomplete intake form for participant ' . $this->updatedParticipantData->id);
+                Mail::to('hello@example.com')
+                    ->send(new IncompleteIntakeFormMailable($this->updatedParticipantData, $this->updatedParticipantData->getMissingFields()));
+                Log::info('✅ Incomplete intake form email sent.');
 
-            // Send email
-            Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
-            Mail::to('hello@example.com')
-                ->send(new IntakeFormMailable($this->updatedParticipantData, $pdfPath));
-            Log::info('✅ PDF email sent.');
+            } else {
+
+                // Upload to Dropbox
+                try {
+                    $dropboxService->upload(Storage::path($pdfPath), $pdfPath);
+                    Log::info('✅ Dropbox upload complete.');
+                } catch (\Exception $e) {
+                    Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
+                }
+
+                // Send email
+                Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
+                Mail::to('hello@example.com')
+                    ->send(new IntakeFormMailable($this->updatedParticipantData, $pdfPath));
+                Log::info('✅ PDF email sent.');
+            }
 
         } catch (Exception $e) {
             Log::error('Failed to generate PDF for participant '.$this->updatedParticipantData->id.': '.$e->getMessage());
