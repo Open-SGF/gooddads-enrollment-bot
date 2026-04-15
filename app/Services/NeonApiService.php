@@ -11,14 +11,25 @@ use Illuminate\Support\Facades\Log;
 
 final class NeonApiService
 {
-    private string $baseUrl;
+    private ?string $baseUrl;
 
-    private string $apiKey;
+    private ?string $apiKey;
 
     public function __construct()
     {
         $this->baseUrl = config('services.neon.base_url');
         $this->apiKey = config('services.neon.api_key');
+    }
+
+    private function ensureConfigured(): void
+    {
+        if (!$this->baseUrl) {
+            throw new \RuntimeException('NEON_BASE_URL is not configured.');
+        }
+
+        if (!$this->apiKey) {
+            throw new \RuntimeException('NEON_API_KEY is not configured.');
+        }
     }
 
     public function getTodaysParticipantIds(): array
@@ -273,6 +284,8 @@ final class NeonApiService
 
     private function fetch(string $endpoint, array $fields = [], ?string $personId = null, bool $useWhereClause = true): array
     {
+        $this->ensureConfigured();
+
         $url = "{$this->baseUrl}/data/{$endpoint}";
 
         $params = [
