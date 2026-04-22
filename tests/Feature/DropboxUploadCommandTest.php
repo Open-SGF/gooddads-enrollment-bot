@@ -11,6 +11,13 @@ use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
+beforeEach(function (): void {
+    config()->set('services.dropbox.app_key', 'app-key');
+    config()->set('services.dropbox.app_secret', 'app-secret');
+    config()->set('services.dropbox.redirect_uri', 'http://localhost:8080/dropbox/callback');
+    config()->set('services.dropbox.upload_path', '/uploads');
+});
+
 it('fails when forcing token expiration without a stored Dropbox token', function (): void {
     $this->artisan('dropbox:test-upload --expire-token')
         ->expectsOutputToContain('No Dropbox token is stored yet. Complete the OAuth flow first.')
@@ -53,7 +60,7 @@ it('retries upload after a 401 by forcing token refresh', function (): void {
 
     $service = new DropboxUploadService(
         app(DropboxOAuthService::class),
-        function () use (&$uploadCalls): array {
+        function (string $fileContents, string $apiArg, string $accessToken, string $dropboxPath) use (&$uploadCalls): array {
             $uploadCalls++;
 
             if ($uploadCalls === 1) {
@@ -100,7 +107,7 @@ it('throws a runtime exception when Dropbox upload API returns an error status',
 
     $service = new DropboxUploadService(
         app(DropboxOAuthService::class),
-        fn (): array => [
+        fn (string $fileContents, string $apiArg, string $accessToken, string $dropboxPath): array => [
             'response' => json_encode(['error_summary' => 'too_many_write_operations']),
             'http_code' => 429,
             'curl_error' => null,

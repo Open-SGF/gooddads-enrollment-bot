@@ -45,7 +45,7 @@ final class DropboxAuthController
         $error = $request->query('error');
         if (is_string($error) && $error !== '') {
             Log::error('Dropbox OAuth callback returned an error.', ['error' => $error]);
-            abort(400, 'Dropbox authorization failed: '.$error);
+            abort(400, 'Dropbox authorization failed.');
         }
 
         $code = $request->query('code');

@@ -59,8 +59,39 @@ return new class extends Migration
 
             return $value;
         } catch (DecryptException) {
+            if ($this->looksLikeLaravelEncryptedPayload($value)) {
+                return $value;
+            }
+
             return Crypt::encryptString($value);
         }
+    }
+
+    private function looksLikeLaravelEncryptedPayload(string $value): bool
+    {
+        $decoded = base64_decode($value, true);
+
+        if (! is_string($decoded) || $decoded === '') {
+            return false;
+        }
+
+        $payload = json_decode($decoded, true);
+
+        if (! is_array($payload)) {
+            return false;
+        }
+
+        foreach (['iv', 'value', 'mac'] as $requiredKey) {
+            if (! array_key_exists($requiredKey, $payload) || ! is_string($payload[$requiredKey]) || $payload[$requiredKey] === '') {
+                return false;
+            }
+        }
+
+        if (array_key_exists('tag', $payload) && ! is_string($payload['tag'])) {
+            return false;
+        }
+
+        return true;
     }
 
     private function decryptIfEncrypted(?string $value): ?string
