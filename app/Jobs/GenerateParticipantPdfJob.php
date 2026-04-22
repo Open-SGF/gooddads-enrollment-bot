@@ -6,7 +6,6 @@ namespace App\Jobs;
 
 use App\DTOs\ParticipantUpdateData;
 use App\Mail\IntakeFormMailable;
-use App\Mail\IncompleteIntakeFormMailable;
 use App\Services\DropboxUploadService;
 use App\Services\PdfIntakeFormService;
 use Exception;
@@ -53,10 +52,9 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             // Check if the required participant form fields are filled
             if ($this->updatedParticipantData->hasMissingFields()) {                    
                 // Send email
-                Log::info('📧 Sending email notification about incomplete intake form for participant ' . $this->updatedParticipantData->id);
-                Mail::to('hello@example.com')
-                    ->send(new IncompleteIntakeFormMailable($this->updatedParticipantData, $this->updatedParticipantData->getMissingFields()));
-                Log::info('✅ Incomplete intake form email sent.');
+                Log::warning('⚠️ PDF not generated for participant ' . $this->updatedParticipantData->id . ': missing required fields', [
+                    'missing_fields' => $this->updatedParticipantData->getMissingFields(),
+                ]);
 
             } else {
 

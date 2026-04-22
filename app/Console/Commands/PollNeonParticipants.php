@@ -45,11 +45,11 @@ final class PollNeonParticipants extends Command
     public function handle()
     {
 
-        $participantIds = $this->neonApi->getTodaysParticipantIds();
+        // Returns a map of personId => fullRecord (contactInfo, children, disclosure, assessment, survey, servicePlan)
+        $fullRecords = $this->neonApi->getTodaysParticipantIds();
 
-        foreach ($participantIds as $participantId) {
-            // Get the full participant record
-            $fullRecord = $this->neonApi->buildFullParticipantRecord($participantId);
+        foreach ($fullRecords as $participantId => $fullRecord) {
+            $participantId = (string) $participantId;
 
             // Create a hash of the full record
             $hash = hash('sha256', json_encode($fullRecord));
