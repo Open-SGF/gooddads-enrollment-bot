@@ -23,7 +23,7 @@ Save changes.
 
 ## 3. Configure OAuth Redirect URI
 
-In your app's `Settings` tab, add this redirect URI exactly:
+In your app's `Settings` tab, add a redirect URI that matches how you will access the app. For localhost development use:
 
 - `http://localhost:8080/dropbox/callback`
 
@@ -47,13 +47,13 @@ DROPBOX_UPLOAD_PATH=/uploads
 
 Security notes:
 
-- `DROPBOX_AUTH_PORT` is intended for local use only and is bound to `127.0.0.1` in `compose.yaml`.
-- Keep `DROPBOX_REDIRECT_URI` aligned with the same host/port as `DROPBOX_AUTH_PORT`.
+- `DROPBOX_AUTH_PORT` is published by Docker for host and LAN access.
+- Keep `DROPBOX_REDIRECT_URI` aligned with the same host/port as `DROPBOX_AUTH_PORT` and the URL configured in the Dropbox app settings.
 
 ## 5. Authorize The App
 
 1. Start the app: `sail up -d`
-2. Open: `http://localhost:8080/dropbox/authorize`
+2. Open: `http://localhost:8080/dropbox/authorize` (or `http://<HOST_LAN_IP>:8080/dropbox/authorize` from another device on your LAN)
 3. Sign in and approve Dropbox consent
 
 After success, the app stores refresh/access tokens in `dropbox_tokens` and can upload files.
@@ -83,9 +83,12 @@ For a fully clean local retest (including sessions):
 
 ### invalid_redirect_uri
 
-Check that Dropbox app settings contain exactly:
+Check that Dropbox app settings contain a URI that exactly matches `DROPBOX_REDIRECT_URI` (including host and port)
+
+Examples:
 
 - `http://localhost:8080/dropbox/callback`
+- `http://<HOST_LAN_IP>:8080/dropbox/callback`
 
 ### Spinner hang after Dropbox login (embedded browser)
 
