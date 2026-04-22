@@ -15,6 +15,8 @@ services:
     environment:
       WWWUSER: "${WWWUSER}"
       LARAVEL_SAIL: 1
+      SUPERVISOR_PHP_COMMAND: >-
+        /bin/sh -lc 'cd /var/www/html/public && exec /usr/bin/php8.5 -S 0.0.0.0:80 /var/www/html/vendor/laravel/framework/src/Illuminate/Foundation/resources/server.php'
       XDEBUG_MODE: "${SAIL_XDEBUG_MODE:-off}"
       XDEBUG_CONFIG: "${SAIL_XDEBUG_CONFIG:-client_host=host.docker.internal}"
       IGNITION_LOCAL_SITES_PATH: "${PWD}"
