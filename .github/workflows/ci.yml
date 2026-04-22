@@ -1,8 +1,8 @@
 name: Build and Publish Docker Image
 
 on:
-  push:
-    branches: [main]
+  release:
+    types: [published]
 
 env:
   REGISTRY: ghcr.io
@@ -12,7 +12,7 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     steps:
@@ -29,13 +29,55 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
-            type=sha,prefix=
+            type=raw,value=${{ github.event.release.tag_name }},priority=1000
+            type=raw,value=latest,enable=${{ !github.event.release.prerelease }},priority=100
+            type=sha,prefix=sha-,priority=10
 
-      - uses: docker/build-push-action@v6
+      - id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Update release notes with container image
+        uses: actions/github-script@v7
+        env:
+          IMAGE_REGISTRY: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          IMAGE_VERSION: ${{ steps.meta.outputs.version }}
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const release = context.payload.release;
+            const imageTag = `${process.env.IMAGE_REGISTRY}:${process.env.IMAGE_VERSION}`;
+            const imageRef = `${imageTag}@${process.env.IMAGE_DIGEST}`;
+            const markerStart = '<!-- docker-image-info:start -->';
+            const markerEnd = '<!-- docker-image-info:end -->';
+            const section = [
+              markerStart,
+              '## Container Image',
+              '',
+              `- Image: \`${imageTag}\``,
+              `- Digest: \`${process.env.IMAGE_DIGEST}\``,
+              `- Immutable ref: \`${imageRef}\``,
+              `- Pull: \`docker pull ${imageTag}\``,
+              markerEnd,
+            ].join('\n');
+
+            const body = release.body || '';
+            const markerRegex = new RegExp(`${markerStart}[\\s\\S]*?${markerEnd}\\n?`, 'm');
+            const nextBody = markerRegex.test(body)
+              ? body.replace(markerRegex, `${section}\n`)
+              : body.trim()
+                ? `${body.trim()}\n\n${section}`
+                : section;
+
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release.id,
+              body: nextBody,
+            });
