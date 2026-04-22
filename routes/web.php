@@ -1,0 +1,11 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Http\Controllers\DropboxAuthController;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/dropbox/authorize', [DropboxAuthController::class, 'authorize'])->name('dropbox.authorize');
+Route::get('/dropbox/callback', [DropboxAuthController::class, 'callback'])
+    ->middleware('throttle:30,1')
+    ->name('dropbox.callback');

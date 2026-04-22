@@ -24,7 +24,9 @@ return [
     ],
 
     'dropbox' => [
-        'access_token' => env('DROPBOX_ACCESS_TOKEN'),
+        'app_key' => env('DROPBOX_APP_KEY'),
+        'app_secret' => env('DROPBOX_APP_SECRET'),
+        'redirect_uri' => env('DROPBOX_REDIRECT_URI'),
         'upload_path' => env('DROPBOX_UPLOAD_PATH', '/uploads'),
     ],
 
