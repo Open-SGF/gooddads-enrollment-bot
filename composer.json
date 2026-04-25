@@ -8,6 +8,7 @@
         "laravel/framework": "^12.0",
         "laravel/tinker": "^2.10.1",
         "mikehaertl/php-pdftk": "*",
+        "sentry/sentry-laravel": "^4.25",
         "spatie/laravel-data": "^4.0",
         "spatie/laravel-typescript-transformer": "^3.0"
     },
