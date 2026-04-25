@@ -38,10 +38,6 @@
         }
     },
     "scripts": {
-        "setup": [
-            "@php artisan config:clear",
-            "@php artisan cache:clear"
-        ],
         "lint": [
             "rector",
             "pint"

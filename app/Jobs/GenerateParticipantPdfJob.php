@@ -1,39 +1,43 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Jobs;
 
-use App\Services\Integrations\NeonApiService;
-use App\Services\NeonDTOTransformer;
+use App\DTOs\ParticipantUpdateData;
+use App\Mail\IntakeFormMailable;
+use App\Services\DropboxUploadService;
 use App\Services\PdfIntakeFormService;
-use App\Models\NeonHash;
+use Exception;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Mail;
-use App\Mail\IntakeFormMailable;
 use Illuminate\Support\Facades\Log;
-use App\DTOs\ParticipantUpdateData;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
 
-class GenerateParticipantPdfJob implements ShouldQueue, ShouldBeEncrypted
+final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
-    
+
     /**
      * Create a new job instance.
-     * @param ChildDTO[] $children
+     *
+     * @param  ChildDTO[]  $children
      */
     public function __construct(
         public readonly ParticipantUpdateData $updatedParticipantData
-    )  {}
+    ) {}
 
     /**
      * Execute the job.
      */
     public function handle(
-        PdfIntakeFormService $pdfService
+        PdfIntakeFormService $pdfService,
+        DropboxUploadService $dropboxService
     ) {
         try {
             // Fetch and transform participant data
@@ -41,16 +45,36 @@ class GenerateParticipantPdfJob implements ShouldQueue, ShouldBeEncrypted
             // $participant = $transformer->transformPerson($fullRecord);
 
             // Generate the PDF
+            Log::info('🔄 Generating PDF.');
             $pdfPath = $pdfService->generate($this->updatedParticipantData);
+            Log::info('✅ PDF-generation complete');
 
-            // Send email
-            Log::info('📧 Sending PDF email for participant ' . $this->updatedParticipantData->id);
-            Mail::to('hello@example.com')
-                ->send(new IntakeFormMailable($this->updatedParticipantData, $pdfPath));
-            Log::info('✅ PDF email sent.');
+            // Check if the required participant form fields are filled
+            if ($this->updatedParticipantData->hasMissingFields()) {                    
+                // Send email
+                Log::warning('⚠️ PDF not generated for participant ' . $this->updatedParticipantData->id . ': missing required fields', [
+                    'missing_fields' => $this->updatedParticipantData->getMissingFields(),
+                ]);
 
-        } catch (\Exception $e) {
-            Log::error('Failed to generate PDF for participant ' . $this->updatedParticipantData->id . ': ' . $e->getMessage());
+            } else {
+
+                // Upload to Dropbox
+                try {
+                    $dropboxService->upload(Storage::path($pdfPath), $pdfPath);
+                    Log::info('✅ Dropbox upload complete.');
+                } catch (\Exception $e) {
+                    Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
+                }
+
+                // Send email
+                Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
+                Mail::to('hello@example.com')
+                    ->send(new IntakeFormMailable($this->updatedParticipantData, $pdfPath));
+                Log::info('✅ PDF email sent.');
+            }
+
+        } catch (Exception $e) {
+            Log::error('Failed to generate PDF for participant '.$this->updatedParticipantData->id.': '.$e->getMessage());
             throw $e; // Let the job retry if needed
         }
     }

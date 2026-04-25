@@ -1,16 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use App\Services\Integrations\NeonApiService;
-use App\Services\NeonDTOTransformer;
-use App\Jobs\GenerateParticipantPdfJob; 
+use App\Jobs\GenerateParticipantPdfJob;
 use App\Models\NeonHash;
-use Carbon\Carbon;
+use App\Services\NeonApiService;
+use App\Transformers\NeonDTOTransformer;
+
+use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
 
-class PollNeonParticipants extends Command
+final class PollNeonParticipants extends Command
 {
     /**
      * The name and signature of the console command.
@@ -42,34 +44,36 @@ class PollNeonParticipants extends Command
      */
     public function handle()
     {
-        
-        $participantIds = $this->neonApi->getTodaysParticipantIds();
 
-        Log::info('Found '.count($participantIds).' participant records to check for updates.');
-   
-        foreach ($participantIds as $participantId) {
-            // Get the full participant record
-            $fullRecord = $this->neonApi->buildFullParticipantRecord($participantId);   
+        // Returns a map of personId => fullRecord (contactInfo, children, disclosure, assessment, survey, servicePlan)
+        $fullRecords = $this->neonApi->getTodaysParticipantIds();
 
+        foreach ($fullRecords as $participantId => $fullRecord) {
+            $participantId = (string) $participantId;
 
             // Create a hash of the full record
             $hash = hash('sha256', json_encode($fullRecord));
 
             // Check if hash already exists
-            if (!NeonHash::where('id', $hash)->exists()) {
-                Log::info("Participant ". $participantId . " has updated data. Queuing pdf regeneration.");
+            if (! NeonHash::where('id', $hash)->exists()) {
+                Log::info('✅ Participant '.$participantId.' has updated data.');
                 // Store the hash for the participant data for future comparison
+                Log::info('🔄 Generating hash....');
                 NeonHash::create(['id' => $hash]);
 
+                Log::info('🔄 Transforming participant data to serializable DTO');
                 // Transform the participant data into serializable DTOs
-                $serializableDTOs = NeonDTOTransformer::transformParticipantData($fullRecord);
-                // Queue the pdf generation job
-                dispatch(new GenerateParticipantPdfJob($serializableDTOs));
+                $participantData = NeonDTOTransformer::transformParticipantData($fullRecord);
+
+                 // Queue the pdf generation job
+                Log::info('📬 Queing pdf regeneration');
+                dispatch(new GenerateParticipantPdfJob($participantData));
+                
             } else {
-                Log::info("Participant ". $participantId . " has no updated data. Skipping pdf regeneration.");
+                Log::info('⏭️ Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
             }
         }
 
-        $this->info('Polling complete.');
+        $this->info('✅ Polling complete.');
     }
 }

@@ -1,13 +1,28 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\DTOs;
 
-class ChildDTO
+readonly class ChildDTO extends AbstractPdfDto
 {
     public function __construct(
-        public readonly string $name,
-        public readonly string $age,
-        public readonly string $dob,
+        public string $name = '',
+        public string $age  = '',
+        public string $dob  = '',
     ) {}
+
+    protected function mandatoryFields(): array
+    {
+        return ['name', 'age', 'dob'];
+    }
+
+    public function toPdfArray(): array
+    {
+        return [
+            'name' => $this->name,
+            'age'  => $this->age,
+            'dob'  => $this->dob,
+        ];
+    }
 }
-?>

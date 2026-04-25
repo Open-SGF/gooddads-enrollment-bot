@@ -4,7 +4,6 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0ab932b3112c4b9eb639186a874b861c",
     "packages": [
         {
             "name": "brick/math",
@@ -4420,84 +4419,6 @@
             "time": "2026-02-21T12:49:54+00:00"
         },
         {
-            "name": "spatie/laravel-typescript-transformer",
-            "version": "3.0.3",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/spatie/laravel-typescript-transformer.git",
-                "reference": "402e8b9e522a9f30ce4bf2ad527573e12d1dda62"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/spatie/laravel-typescript-transformer/zipball/402e8b9e522a9f30ce4bf2ad527573e12d1dda62",
-                "reference": "402e8b9e522a9f30ce4bf2ad527573e12d1dda62",
-                "shasum": ""
-            },
-            "require": {
-                "illuminate/contracts": "^11.0|^12.0|^13.0",
-                "php": "^8.2",
-                "spatie/typescript-transformer": "^3.0"
-            },
-            "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.0",
-                "orchestra/testbench": "^9.0|^10.0|^11.0",
-                "pestphp/pest": "^3.0|^4.2",
-                "pestphp/pest-plugin-arch": "^3.0|^4.0",
-                "pestphp/pest-plugin-laravel": "^3.0|^4.0",
-                "phpstan/extension-installer": "^1.1",
-                "phpstan/phpstan": "^2.0",
-                "phpstan/phpstan-deprecation-rules": "^2.0",
-                "phpstan/phpstan-phpunit": "^2.0",
-                "spatie/laravel-data": "^4.0"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "providers": [
-                        "Spatie\\LaravelTypeScriptTransformer\\TypeScriptTransformerServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "Spatie\\LaravelTypeScriptTransformer\\": "src"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Ruben Van Assche",
-                    "email": "ruben@spatie.be",
-                    "homepage": "https://spatie.be",
-                    "role": "Developer"
-                }
-            ],
-            "description": "Transform your PHP structures to TypeScript types",
-            "homepage": "https://github.com/spatie/typescript-transformer",
-            "keywords": [
-                "spatie",
-                "typescript-transformer"
-            ],
-            "support": {
-                "issues": "https://github.com/spatie/laravel-typescript-transformer/issues",
-                "source": "https://github.com/spatie/laravel-typescript-transformer/tree/3.0.3"
-            },
-            "funding": [
-                {
-                    "url": "https://spatie.be/open-source/support-us",
-                    "type": "custom"
-                },
-                {
-                    "url": "https://github.com/spatie",
-                    "type": "github"
-                }
-            ],
-            "time": "2026-03-17T08:15:03+00:00"
-        },
-        {
             "name": "spatie/php-structure-discoverer",
             "version": "2.4.0",
             "source": {
@@ -4575,74 +4496,6 @@
                 }
             ],
             "time": "2026-02-21T15:57:15+00:00"
-        },
-        {
-            "name": "spatie/typescript-transformer",
-            "version": "3.1.0",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/spatie/typescript-transformer.git",
-                "reference": "3f3c9789eb04274ba2d1e42afe5552821257a695"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/spatie/typescript-transformer/zipball/3f3c9789eb04274ba2d1e42afe5552821257a695",
-                "reference": "3f3c9789eb04274ba2d1e42afe5552821257a695",
-                "shasum": ""
-            },
-            "require": {
-                "php": "^8.2",
-                "phpstan/phpdoc-parser": "^2.3",
-                "roave/better-reflection": "^6.41",
-                "spatie/file-system-watcher": "^1.1",
-                "spatie/php-structure-discoverer": "^2.2",
-                "symfony/process": "^7.0|^8.0"
-            },
-            "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.0",
-                "pestphp/pest": "^3.0|^4.0",
-                "pestphp/pest-plugin-arch": "^3.0|^4.0",
-                "phpstan/extension-installer": "^1.1",
-                "phpstan/phpstan": "^2.0",
-                "phpstan/phpstan-deprecation-rules": "^2.0",
-                "phpstan/phpstan-phpunit": "^2.0",
-                "spatie/ray": "^1.41",
-                "spatie/temporary-directory": "^2.1"
-            },
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "Spatie\\TypeScriptTransformer\\": "src/"
-                }
-            },
-            "notification-url": "https://packagist.org/downloads/",
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Ruben Van Assche",
-                    "email": "ruben@spatie.be",
-                    "role": "Developer"
-                }
-            ],
-            "description": "This is my package typescript-transformer",
-            "homepage": "https://github.com/spatie/typescript-transformer",
-            "keywords": [
-                "spatie",
-                "typescript-transformer"
-            ],
-            "support": {
-                "issues": "https://github.com/spatie/typescript-transformer/issues",
-                "source": "https://github.com/spatie/typescript-transformer/tree/3.1.0"
-            },
-            "funding": [
-                {
-                    "url": "https://github.com/spatie",
-                    "type": "github"
-                }
-            ],
-            "time": "2026-03-16T09:45:36+00:00"
         },
         {
             "name": "symfony/clock",

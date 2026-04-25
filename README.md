@@ -11,67 +11,45 @@
 - [Install PHP](https://www.php.net/manual/en/install.php)
 - [Install Composer](https://getcomposer.org/doc/00-intro.md)
 - Install Docker
-  - For Mac: [Docker Desktop](https://docs.docker.com/desktop/install/mac-install/) | [Orbstack](https://docs.orbstack.dev/quick-start#installation)
-  - For Windows: [Docker Desktop](https://docs.docker.com/desktop/install/windows-install/)
-  - For Linux: [Docker Desktop](https://docs.docker.com/desktop/install/linux-install/)
+    - For Mac: [Docker Desktop](https://docs.docker.com/desktop/install/mac-install/) | [Orbstack](https://docs.orbstack.dev/quick-start#installation)
+    - For Windows: [Docker Desktop](https://docs.docker.com/desktop/install/windows-install/)
+    - For Linux: [Docker Desktop](https://docs.docker.com/desktop/install/linux-install/)
 - Navigate to the project directory and run `composer install`
 - Duplicate the .env.example: `cp .env.example .env`
+- Configure alias for sail: `alias sail='sh $([ -f sail ] && echo sail || echo vendor/bin/sail)'`
+- Start the Docker containers: `sail up -d`
+- Wait for the containers to start up. You can check the status of the containers with `sail ps`
 - Generate a new APP_KEY: `sail artisan key:generate`. This will automatically update the .env file for the APP_KEY value.
-- For running sail commands, by default, you are required to enter the full path to the executable in `vendor/bin/sail`. Most devs prefer to create an alias in their shell so they only have to type `sail`. Read the sail docs about [configuring a sail alias](https://laravel.com/docs/11.x/sail#configuring-a-shell-alias). Further documentation will assume an alias exists in your shell.
+- Create the database tables: `sail artisan migrate`
 
-## Installing Current Project Dependencies
+## Project reset
+If you are stuck or Laravel is stuck. 
+- **USE WITH CAUTION, THIS IS A HARD RESET OF THE DOCKER CONTAINERS**: `sail down -v --rmi all --remove-orphans`
+- Start the Docker containers: `sail up -d`
+- Wait for the containers to start up. You can check the status of the containers witj `sail ps`
+- Create the database tables: `sail artisan migrate`
 
-- All project contributors should run these commands every week to ensure your local project is using the current project dependencies.
-  - `composer install`
-  - `composer setup`
-  - `npm install`
-  - `npm run build`
+## Poll Neon
+### Clean-up and log monitoring
+- Run `bash reset-queue.sh` which does the following:
+    - Clear configs: `sail artisan config:clear`
+    - Clear cache: `sail artisan cache:clear`
+    - Clear routes: `sail artisan route:clear`
+    - Regenerate autoloader files: `sail composer dump-autoload`
+    - Flush the queue: `sail artisan queue:flush`
+    - Clear the queue: `sail artisan queue:clear`
+    - Restart the queue: `sail artisan queue:restart`
+    - Clear the hash-table and failed jobs table:
+        - Start MySQL terminal: `sail artisan tinker`
+        - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`
+        - Clear failed jobs-table: `DB::table('failed_jobs')->truncate();`
+        - Exit MySQL terminal: `exit`
+    - Reset the laravel log file (RHEL/Almalinux syntax): `> storage/logs/laravel.log`
+    - Monitor the laravel log file (RHEL/Almalinux syntax): `tail -f storage/logs/laravel.log`
 
-## Updating the Project Dependencies
+### Start worker
+- Start single-try worker (adjust --tries as needed): `sail artisan queue:work --tries=1`
 
-- The project maintainer should run these commands every week to ensure the project is using the latest dependencies, then merge `composer.lock` and `package-lock.json` along with any files that needed to be fixed.
-  - `composer update`
-  - `npm update`
-  - `npm run build`
-  - `composer lint`
-  - `composer analyse`
+### Poll Neon
+- Poll neon with high verbosity (-vvv): `sail artisan neon:poll-participants -vvv`
 
-## Starting the Project
-
-- Start the project: `sail up -d`
-- Run DB migration scripts only on initial setup and after creating new migrations `sail artisan migrate --seed`
-- Run the inertia frontend: `npm run dev`
-- View the project in your browser at http://localhost
-  - The URL port number is configured in the `.env` file as APP_PORT
-
-## Project Linting
-
-- Navigate to the project directory and run `composer lint`
-
-## Project Static Analysis
-
-- Navigate to the project directory and run `composer analyse`
-
-## Viewing and Generating Database Diagrams
-
-The file [`./database/schema.dbml`](./database/schema.dbml) can be opened with a tool such as [dbdiagram.io](https://dbdiagram.io/).
-There are also e VS Code extensions such as [DBML Live Preview](https://marketplace.visualstudio.com/items?itemName=nicolas-liger.dbml-viewer) that can view these.
-
-To regenerate the file use the artisan command `sail artisan dbml:generate`
-
-## Shutting Down the Project
-
-- To stop the containers run `sail down`
-
-## Resetting the Database
-
-- To purge your MySQL database, run `sail down -v`, then `sail up -d`, then `sail artisan migrate:fresh --seed`. (⚠️ WARNING: This will purge EVERYTHING from your database! ⚠️)
-
-## Testing emails
-
-- The default mail credentials in `.env` point to a mailpit docker container which captures all delivered emails. You can view these emails by visiting `http://localhost:8025`
-
-## Frontend Development
-
-- Use [shadcn components](https://ui.shadcn.com/) within `resources/js/Components/ui` when building pages
-- Any new custom reusable components should be accompanied by a storybook story in the `stories` directory

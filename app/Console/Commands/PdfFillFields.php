@@ -1,12 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 use mikehaertl\pdftk\Pdf;
 
-class PdfFillFields extends Command
+final class PdfFillFields extends Command
 {
     protected $signature = 'pdf:fill-fields';
 
@@ -14,9 +16,9 @@ class PdfFillFields extends Command
 
     public function handle()
     {
-        $inputPath = storage_path('/enrollment-form/Enrollment_Form_Fillable_2026-01-27.pdf');
+        $inputPath = storage_path('pdfs/intake-form/Enrollment_Form_Fillable_2026-01-27.pdf');
         $timestamp = now()->format('Ymd_His');
-        $outputPath = storage_path("/enrollment-form/enrollment_documents_field_names-{$timestamp}.pdf");
+        $outputPath = storage_path("pdfs/intake-form/enrollment_documents_field_names-{$timestamp}.pdf");
 
         // --- 1️⃣ First instance: Get all field names ---
         $reader = new Pdf($inputPath);
@@ -51,8 +53,8 @@ class PdfFillFields extends Command
 
         $this->info("✅ Filled PDF saved to: {$outputPath}");
 
-        // // Optional: store it using Laravel’s Storage
-        // Storage::put("forms/enrollment_documents_fillable_gd_global_DRAFT_v1-{$timestamp}.pdf", file_get_contents($outputPath));
+        // Optional: store it using Laravel’s Storage
+        Storage::put("forms/enrollment_documents_fillable_gd_global_DRAFT_v1-{$timestamp}.pdf", file_get_contents($outputPath));
 
         return 0;
     }

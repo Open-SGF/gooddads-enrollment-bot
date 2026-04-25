@@ -1,11 +1,14 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
-use App\Services\Integrations\NeonApiService;
+use App\Services\NeonApiService;
 use Illuminate\Console\Command;
+use Throwable;
 
-class TestParticipantRecord extends Command
+final class TestParticipantRecord extends Command
 {
     /**
      * The name and signature of the console command.
@@ -47,7 +50,7 @@ class TestParticipantRecord extends Command
 
             $this->line(json_encode($record, JSON_PRETTY_PRINT));
 
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             $this->error('Error: '.$e->getMessage());
 
             return self::FAILURE;

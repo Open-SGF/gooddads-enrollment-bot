@@ -5,11 +5,11 @@ namespace App\Data;
 use Carbon\Carbon;
 use Spatie\LaravelData\Attributes\MapInputName;
 use Spatie\LaravelData\Data;
-use Spatie\LaravelData\Mappers\SnakeCaseMapper;
+use Spatie\LaravelData\Mappers\CamelCaseMapper;
 use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
 #[TypeScript]
-#[MapInputName(SnakeCaseMapper::class)]
+#[MapInputName(CamelCaseMapper::class)]
 class RegionData extends Data
 {
     public function __construct(

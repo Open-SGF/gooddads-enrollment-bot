@@ -1,24 +1,25 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Mail;
 
+use App\DTOs\ParticipantUpdateData;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use App\DTOs\ParticipantUpdateData;
 
-class IntakeFormMailable extends Mailable
+final class IntakeFormMailable extends Mailable
 {
     use Queueable, SerializesModels;
-
 
     /**
      * Create a new message instance.
      */
-    public function __construct(private readonly ParticipantUpdateData $participant, private readonly string $pdfPath){}
+    public function __construct(private readonly ParticipantUpdateData $participant, private readonly string $pdfPath) {}
 
     /**
      * Get the message envelope.
@@ -46,7 +47,7 @@ class IntakeFormMailable extends Mailable
     /**
      * Get the attachments for the message.
      *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
+     * @return array<int, Attachment>
      */
     public function attachments(): array
     {
