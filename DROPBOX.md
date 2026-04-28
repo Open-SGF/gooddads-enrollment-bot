@@ -55,8 +55,9 @@ Security notes:
 ## 5. Authorize The App
 
 1. Start the app: `sail up -d`
-2. Open: `http://localhost:8080/dropbox/authorize` for local-only development, or `https://<NAS_HOSTNAME>/dropbox/authorize` from another device on your LAN.
-3. Sign in and approve Dropbox consent
+2. Open: `http://localhost:8080/dropbox/authorize` from the same machine, or `https://<NAS_HOSTNAME>/dropbox/authorize` from another device on your LAN.
+
+Note: `DROPBOX_AUTH_PORT` is published by Docker and is not loopback-bound by default, so it can be reached by other LAN clients unless your host firewall/network policy restricts access. 3. Sign in and approve Dropbox consent
 
 After success, the app stores refresh/access tokens in `dropbox_tokens` and can upload files.
 

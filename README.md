@@ -22,7 +22,7 @@
 - Wait for the containers to start up. You can check the status of the containers with `sail ps`
 - Generate a new APP_KEY: `sail artisan key:generate`. This will automatically update the .env file for the APP_KEY value.
 - Create the database tables: `sail artisan migrate`
-- Authorize Dropbox uploads by visiting `http://localhost:8080/dropbox/authorize` for local-only development, or your NAS HTTPS hostname for LAN use. Set the Dropbox app callback to the exact URI in `DROPBOX_REDIRECT_URI` and use `https` for any non-local callback.
+- Authorize Dropbox uploads by visiting `http://localhost:8080/dropbox/authorize` from the same machine, or your NAS HTTPS hostname for LAN use. `DROPBOX_AUTH_PORT` is published by Docker and reachable on your LAN unless your host firewall/network policy restricts it. Set the Dropbox app callback to the exact URI in `DROPBOX_REDIRECT_URI` and use `https` for any non-local callback.
 
 ## Project reset
 
