@@ -17,6 +17,7 @@ beforeEach(function (): void {
     config()->set('services.dropbox.app_secret', 'app-secret');
     config()->set('services.dropbox.redirect_uri', 'http://localhost:8080/dropbox/callback');
     config()->set('services.dropbox.upload_path', '/uploads');
+    config()->set('services.dropbox.require_basic_auth', false);
 });
 
 it('redirects to Dropbox authorization using the callback route', function (): void {
@@ -115,6 +116,7 @@ it('registers throttling middleware for Dropbox callback route', function (): vo
     $route = Route::getRoutes()->getByName('dropbox.callback');
 
     expect($route)->not->toBeNull();
+    expect($route?->gatherMiddleware())->toContain('dropbox.basic');
     expect($route?->gatherMiddleware())->toContain('throttle:30,1');
 });
 

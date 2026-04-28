@@ -43,6 +43,9 @@ DROPBOX_AUTH_PORT=8080
 DROPBOX_APP_KEY=your_dropbox_app_key
 DROPBOX_APP_SECRET=your_dropbox_app_secret
 DROPBOX_REDIRECT_URI=http://localhost:8080/dropbox/callback
+DROPBOX_OAUTH_REQUIRE_BASIC_AUTH=true
+DROPBOX_OAUTH_BASIC_USER=dropbox-admin
+DROPBOX_OAUTH_BASIC_PASSWORD=change-me
 DROPBOX_UPLOAD_PATH=/uploads
 ```
 
@@ -51,13 +54,26 @@ Security notes:
 - `DROPBOX_AUTH_PORT` is published by Docker for host and LAN access.
 - Keep `DROPBOX_REDIRECT_URI` aligned with the same host/port as `DROPBOX_AUTH_PORT` and the URL configured in the Dropbox app settings.
 - Dropbox rejects non-local `http` redirect URIs. For LAN authorization, use an `https` hostname instead of a raw `http` LAN IP callback.
+- Dropbox OAuth routes are protected with HTTP Basic Auth by default using `DROPBOX_OAUTH_BASIC_USER` and `DROPBOX_OAUTH_BASIC_PASSWORD`.
 
 ## 5. Authorize The App
 
 1. Start the app: `sail up -d`
 2. Open: `http://localhost:8080/dropbox/authorize` from the same machine, or `https://<NAS_HOSTNAME>/dropbox/authorize` from another device on your LAN.
 
-Note: `DROPBOX_AUTH_PORT` is published by Docker and is not loopback-bound by default, so it can be reached by other LAN clients unless your host firewall/network policy restricts access. 3. Sign in and approve Dropbox consent
+- Your browser will prompt for HTTP Basic Auth credentials before loading the authorize page
+- Enter `DROPBOX_OAUTH_BASIC_USER` and `DROPBOX_OAUTH_BASIC_PASSWORD`
+
+3. Sign in and approve Dropbox consent
+
+Note: `DROPBOX_AUTH_PORT` is published by Docker and is not loopback-bound by default, so it can be reached by other LAN clients unless your host firewall/network policy restricts access.
+
+### Basic Auth Setup Notes (Testing vs End User)
+
+- Local testing on one machine: keep `DROPBOX_OAUTH_REQUIRE_BASIC_AUTH=true` and use a local-only credential pair in `.env`.
+- LAN/NAS end user flow: share the same credential pair only with trusted admins/operators who perform Dropbox authorization.
+- If your reverse proxy already enforces equivalent auth controls, you can explicitly disable app-level guard by setting `DROPBOX_OAUTH_REQUIRE_BASIC_AUTH=false`.
+- After changing any Dropbox auth env values, restart the app and clear cached config: `sail artisan config:clear`.
 
 After success, the app stores refresh/access tokens in `dropbox_tokens` and can upload files.
 
