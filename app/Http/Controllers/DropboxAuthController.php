@@ -59,8 +59,7 @@ final class DropboxAuthController
         $connectedEmail = $this->dropboxOAuthService->fetchAccountEmail($dropboxToken->access_token);
 
         Log::info('Dropbox OAuth callback completed successfully.', [
-            'account_id' => $dropboxToken->account_id,
-            'connected_email' => $connectedEmail,
+            'account_id' => $dropboxToken->account_id
         ]);
 
         return view('dropbox.success', [
