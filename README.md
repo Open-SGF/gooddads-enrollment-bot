@@ -22,7 +22,7 @@
 - Wait for the containers to start up. You can check the status of the containers with `sail ps`
 - Generate a new APP_KEY: `sail artisan key:generate`. This will automatically update the .env file for the APP_KEY value.
 - Create the database tables: `sail artisan migrate`
-- Authorize Dropbox uploads by visiting `http://localhost:8080/dropbox/authorize` after the app is running. Set the Dropbox app callback to `http://localhost:8080/dropbox/callback`.
+- Authorize Dropbox uploads by visiting `http://localhost:8080/dropbox/authorize` for local-only development, or your NAS HTTPS hostname for LAN use. Set the Dropbox app callback to the exact URI in `DROPBOX_REDIRECT_URI` and use `https` for any non-local callback.
 
 ## Project reset
 
@@ -61,7 +61,7 @@ If you are stuck or Laravel is stuck.
 
 - End-user setup walkthrough: see [DROPBOX.md](DROPBOX.md).
 - The OAuth page is exposed on `DROPBOX_AUTH_PORT` and routes to the same Laravel app container, including access from other devices on your LAN.
-- The Dropbox app callback should point to `DROPBOX_REDIRECT_URI` and must match the exact host/port used by the browser (for example localhost or a host LAN IP).
+- The Dropbox app callback should point to `DROPBOX_REDIRECT_URI` and must match the exact host, scheme, and port used by the browser. Use `http` only for `localhost`; use `https` with a LAN hostname for any non-local callback.
 - After authorizing successfully, Laravel stores the Dropbox `refresh_token` and rotating `access_token` in the `dropbox_tokens` table.
 - Dropbox `access_token` and `refresh_token` are encrypted at rest using Laravel encrypted casts (backed by `APP_KEY`).
 - After rotating `APP_KEY`, rewrap existing Dropbox tokens using the previous key: `sail artisan dropbox:rewrap-tokens --from-key="base64:OLD_APP_KEY_VALUE" --force`.
@@ -74,7 +74,7 @@ If you are stuck or Laravel is stuck.
 
 #### Re-authorization note
 
-If you need to re-authorize (e.g. to rotate tokens or after revoking access in Dropbox), always initiate the flow from `http://localhost:8080/dropbox/authorize` — do not reuse a stale Dropbox URL from a previous attempt.
+If you need to re-authorize (e.g. to rotate tokens or after revoking access in Dropbox), always initiate the flow from your `APP_URL` authorize endpoint (e.g. `http://localhost:8080/dropbox/authorize` for local development, or `https://<NAS_HOSTNAME>/dropbox/authorize` for LAN use) — do not reuse a stale Dropbox URL from a previous attempt.
 
 If you log out of Dropbox first and then start a new flow, the Dropbox login page may appear to hang (spinner animation) after you submit your credentials. This is a known Dropbox SPA behavior: after a successful login, its client-side code tries to restore a cached "entry page" from a prior OAuth session and gets stuck when that cached URL is stale. **Simply refresh the page** — since you are now logged in, Dropbox will re-evaluate the OAuth URL and proceed directly to the consent screen. This only affects re-authorization in the same browser session; it does not affect end-user flows.
 
