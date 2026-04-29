@@ -5,6 +5,12 @@ declare(strict_types=1);
 use App\Http\Controllers\DropboxAuthController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/', fn (): string => 'Web routes working');
+
+Route::get('/sentry-test', function (): void {
+    throw new Exception('Sentry test exception');
+});
+
 Route::get('/dropbox/authorize', [DropboxAuthController::class, 'authorize'])
     ->middleware('dropbox.basic')
     ->name('dropbox.authorize');
