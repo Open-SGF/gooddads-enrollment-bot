@@ -24,8 +24,13 @@ return [
     ],
 
     'dropbox' => [
-        'access_token' => env('DROPBOX_ACCESS_TOKEN'),
+        'app_key' => env('DROPBOX_APP_KEY'),
+        'app_secret' => env('DROPBOX_APP_SECRET'),
+        'redirect_uri' => env('DROPBOX_REDIRECT_URI'),
         'upload_path' => env('DROPBOX_UPLOAD_PATH', '/uploads'),
+        'require_basic_auth' => env('DROPBOX_OAUTH_REQUIRE_BASIC_AUTH', true),
+        'basic_auth_user' => env('DROPBOX_OAUTH_BASIC_USER'),
+        'basic_auth_password' => env('DROPBOX_OAUTH_BASIC_PASSWORD'),
     ],
 
 ];

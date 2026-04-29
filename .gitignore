@@ -32,3 +32,6 @@ CLAUDE.md
 
 # SQLite databases
 database/*.sqlite
+
+# Local HTTPS certs for Dropbox OAuth redirect URI
+/docker/nginx/certs/
