@@ -6,6 +6,7 @@ namespace App\Console\Commands;
 
 use App\Services\NeonApiService;
 use Illuminate\Console\Command;
+use Override;
 use Throwable;
 
 final class TestParticipantRecord extends Command
@@ -15,6 +16,7 @@ final class TestParticipantRecord extends Command
      *
      * @var string
      */
+    #[Override]
     protected $signature = 'app:test-participant-record {id : The ID of the participant to test}';
 
     /**
@@ -22,17 +24,15 @@ final class TestParticipantRecord extends Command
      *
      * @var string
      */
+    #[Override]
     protected $description = 'Test the buildParticipantRecord() method and output the JSON response';
 
-    /**
+    public function __construct(/**
      * Inject NeonApiService.
      */
-    protected NeonApiService $neon;
-
-    public function __construct(NeonApiService $neon)
+        private readonly NeonApiService $neon)
     {
-        parent::__construct();   // required in Laravel Commands
-        $this->neon = $neon;
+        parent::__construct();
     }
 
     /**
@@ -42,16 +42,17 @@ final class TestParticipantRecord extends Command
     {
         $id = $this->argument('id');
 
-        $this->info("Testing buildParticipantRecord() for ID: {$id}");
+        $this->info('Testing buildParticipantRecord() for ID: '.$id);
         $this->newLine();
 
         try {
             $record = $this->neon->buildFullParticipantRecord($id);
+            $encodedRecord = json_encode($record, JSON_PRETTY_PRINT);
 
-            $this->line(json_encode($record, JSON_PRETTY_PRINT));
+            $this->line($encodedRecord === false ? 'Unable to encode record as JSON.' : $encodedRecord);
 
-        } catch (Throwable $e) {
-            $this->error('Error: '.$e->getMessage());
+        } catch (Throwable $throwable) {
+            $this->error('Error: '.$throwable->getMessage());
 
             return self::FAILURE;
         }

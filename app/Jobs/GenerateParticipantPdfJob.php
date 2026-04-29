@@ -21,13 +21,12 @@ use Illuminate\Support\Facades\Storage;
 
 final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable;
+    use InteractsWithQueue;
+    use Queueable;
+    use SerializesModels;
 
-    /**
-     * Create a new job instance.
-     *
-     * @param  ChildDTO[]  $children
-     */
+    /** Create a new job instance. */
     public function __construct(
         public readonly ParticipantUpdateData $updatedParticipantData
     ) {}
@@ -38,7 +37,7 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
     public function handle(
         PdfIntakeFormService $pdfService,
         DropboxUploadService $dropboxService
-    ) {
+    ): void {
         try {
             // Fetch and transform participant data
             // $fullRecord = $neonApi->buildFullParticipantRecord($this->participantId);
@@ -50,9 +49,9 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             Log::info('✅ PDF-generation complete');
 
             // Check if the required participant form fields are filled
-            if ($this->updatedParticipantData->hasMissingFields()) {                    
+            if ($this->updatedParticipantData->hasMissingFields()) {
                 // Send email
-                Log::warning('⚠️ PDF not generated for participant ' . $this->updatedParticipantData->id . ': missing required fields', [
+                Log::warning('⚠️ PDF not generated for participant '.$this->updatedParticipantData->id.': missing required fields', [
                     'missing_fields' => $this->updatedParticipantData->getMissingFields(),
                 ]);
 
@@ -62,7 +61,7 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
                 try {
                     $dropboxService->upload(Storage::path($pdfPath), $pdfPath);
                     Log::info('✅ Dropbox upload complete.');
-                } catch (\Exception $e) {
+                } catch (Exception $e) {
                     Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
                 }
 
@@ -73,9 +72,9 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
                 Log::info('✅ PDF email sent.');
             }
 
-        } catch (Exception $e) {
-            Log::error('Failed to generate PDF for participant '.$this->updatedParticipantData->id.': '.$e->getMessage());
-            throw $e; // Let the job retry if needed
+        } catch (Exception $exception) {
+            Log::error('Failed to generate PDF for participant '.$this->updatedParticipantData->id.': '.$exception->getMessage());
+            throw $exception; // Let the job retry if needed
         }
     }
 }

@@ -13,8 +13,10 @@ use Illuminate\Queue\SerializesModels;
 
 final class IncompleteIntakeFormMailable extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable;
+    use SerializesModels;
 
+    /** @param  list<string>  $missingFields */
     public function __construct(
         private readonly ParticipantUpdateData $participant,
         private readonly array $missingFields,
@@ -32,12 +34,13 @@ final class IncompleteIntakeFormMailable extends Mailable
         return new Content(
             view: 'emails.incomplete-intake-form',
             with: [
-                'participant'   => $this->participant,
+                'participant' => $this->participant,
                 'missingFields' => $this->missingFields,
             ],
         );
     }
 
+    /** @return array<int, never> */
     public function attachments(): array
     {
         return [];

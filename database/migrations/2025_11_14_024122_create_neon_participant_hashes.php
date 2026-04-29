@@ -13,7 +13,7 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('neon_participant_hashes', function (Blueprint $table) {
+        Schema::create('neon_participant_hashes', function (Blueprint $table): void {
             $table->string('id', 64)->primary();
             $table->timestamps();
         });

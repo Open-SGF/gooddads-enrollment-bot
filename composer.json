@@ -47,7 +47,7 @@
             "rector --dry-run"
         ],
         "test:types": [
-            "phpstan"
+            "phpstan --memory-limit=1G"
         ],
         "test:unit": [
             "@php artisan config:clear --ansi",

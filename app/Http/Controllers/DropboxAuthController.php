@@ -7,14 +7,14 @@ namespace App\Http\Controllers;
 use App\Services\DropboxOAuthService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
-final class DropboxAuthController
+final readonly class DropboxAuthController
 {
     public function __construct(
-        private readonly DropboxOAuthService $dropboxOAuthService,
+        private DropboxOAuthService $dropboxOAuthService,
     ) {}
 
     public function authorize(Request $request): RedirectResponse
@@ -59,7 +59,7 @@ final class DropboxAuthController
         $connectedEmail = $this->dropboxOAuthService->fetchAccountEmail($dropboxToken->access_token);
 
         Log::info('Dropbox OAuth callback completed successfully.', [
-            'account_id' => $dropboxToken->account_id
+            'account_id' => $dropboxToken->account_id,
         ]);
 
         return view('dropbox.success', [

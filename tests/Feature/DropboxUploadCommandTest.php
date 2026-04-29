@@ -25,7 +25,7 @@ it('fails when forcing token expiration without a stored Dropbox token', functio
 });
 
 it('rejects upload requests for missing local files before calling Dropbox', function (): void {
-    $service = app(DropboxUploadService::class);
+    $service = resolve(DropboxUploadService::class);
 
     expect(fn () => $service->upload('/tmp/does-not-exist-dropbox-test.pdf', 'dropbox-test/missing-file.pdf'))
         ->toThrow(InvalidArgumentException::class, 'File not found or not readable');
@@ -59,7 +59,7 @@ it('retries upload after a 401 by forcing token refresh', function (): void {
     $uploadCalls = 0;
 
     $service = new DropboxUploadService(
-        app(DropboxOAuthService::class),
+        resolve(DropboxOAuthService::class),
         function (string $fileContents, string $apiArg, string $accessToken, string $dropboxPath) use (&$uploadCalls): array {
             $uploadCalls++;
 
@@ -106,7 +106,7 @@ it('throws a runtime exception when Dropbox upload API returns an error status',
     $absoluteLocalPath = Storage::path('dropbox-test/upload-fail-probe.txt');
 
     $service = new DropboxUploadService(
-        app(DropboxOAuthService::class),
+        resolve(DropboxOAuthService::class),
         fn (string $fileContents, string $apiArg, string $accessToken, string $dropboxPath): array => [
             'response' => json_encode(['error_summary' => 'too_many_write_operations']),
             'http_code' => 429,
@@ -114,7 +114,7 @@ it('throws a runtime exception when Dropbox upload API returns an error status',
         ],
     );
 
-    expect(fn () => $service->upload($absoluteLocalPath, 'dropbox-test/upload-fail-probe.txt'))
+    expect(fn (): array => $service->upload($absoluteLocalPath, 'dropbox-test/upload-fail-probe.txt'))
         ->toThrow(RuntimeException::class, 'Dropbox upload failed (429): too_many_write_operations');
 
     Storage::delete('dropbox-test/upload-fail-probe.txt');

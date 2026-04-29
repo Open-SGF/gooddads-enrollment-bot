@@ -6,9 +6,9 @@ use App\Models\DropboxToken;
 use App\Services\DropboxOAuthService;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Route;
 
 uses(RefreshDatabase::class);
 
@@ -141,7 +141,7 @@ it('refreshes an expired Dropbox access token', function (): void {
         ]),
     ]);
 
-    $service = app(DropboxOAuthService::class);
+    $service = resolve(DropboxOAuthService::class);
 
     expect($service->getValidAccessToken())->toBe('refreshed-token');
 
@@ -176,7 +176,7 @@ it('persists rotated Dropbox refresh token when returned by refresh response', f
         ]),
     ]);
 
-    $service = app(DropboxOAuthService::class);
+    $service = resolve(DropboxOAuthService::class);
 
     expect($service->getValidAccessToken())->toBe('refreshed-token');
 
@@ -191,7 +191,7 @@ it('persists rotated Dropbox refresh token when returned by refresh response', f
 it('throws an actionable error when stored access token cannot be decrypted', function (): void {
     $oldAppKey = 'base64:'.base64_encode(random_bytes(32));
     $cipher = (string) config('app.cipher', 'AES-256-CBC');
-    $oldKey = base64_decode(substr($oldAppKey, 7), true);
+    $oldKey = base64_decode(mb_substr($oldAppKey, 7), true);
 
     expect($oldKey)->toBeString();
 
@@ -209,7 +209,7 @@ it('throws an actionable error when stored access token cannot be decrypted', fu
         'updated_at' => now(),
     ]);
 
-    $service = app(DropboxOAuthService::class);
+    $service = resolve(DropboxOAuthService::class);
 
     expect(fn () => $service->getValidAccessToken())
         ->toThrow(RuntimeException::class, 'Stored Dropbox credentials cannot be decrypted');
@@ -218,7 +218,7 @@ it('throws an actionable error when stored access token cannot be decrypted', fu
 it('throws an actionable error when stored refresh token cannot be decrypted', function (): void {
     $oldAppKey = 'base64:'.base64_encode(random_bytes(32));
     $cipher = (string) config('app.cipher', 'AES-256-CBC');
-    $oldKey = base64_decode(substr($oldAppKey, 7), true);
+    $oldKey = base64_decode(mb_substr($oldAppKey, 7), true);
 
     expect($oldKey)->toBeString();
 
@@ -238,14 +238,14 @@ it('throws an actionable error when stored refresh token cannot be decrypted', f
         'refresh_token' => $oldEncrypter->encryptString('old-key-refresh-token'),
     ]);
 
-    $service = app(DropboxOAuthService::class);
+    $service = resolve(DropboxOAuthService::class);
 
     expect(fn () => $service->getValidAccessToken(forceRefresh: true))
         ->toThrow(RuntimeException::class, 'Stored Dropbox credentials cannot be decrypted');
 });
 
 it('rejects authorization payload when expires_in is invalid', function (): void {
-    $service = app(DropboxOAuthService::class);
+    $service = resolve(DropboxOAuthService::class);
 
     expect(fn () => $service->storeAuthorizationTokens([
         'access_token' => 'fresh-access-token',
@@ -277,7 +277,7 @@ it('rejects refresh payload when expires_in is invalid', function (): void {
         ]),
     ]);
 
-    $service = app(DropboxOAuthService::class);
+    $service = resolve(DropboxOAuthService::class);
 
     expect(fn () => $service->getValidAccessToken())
         ->toThrow(RuntimeException::class, 'invalid expires_in');
@@ -327,7 +327,7 @@ it('reports when no token rows exist during auth reset', function (): void {
 it('rewraps Dropbox tokens using a previous app key', function (): void {
     $oldAppKey = 'base64:'.base64_encode(random_bytes(32));
     $cipher = (string) config('app.cipher', 'AES-256-CBC');
-    $oldKey = base64_decode(substr($oldAppKey, 7), true);
+    $oldKey = base64_decode(mb_substr($oldAppKey, 7), true);
 
     expect($oldKey)->toBeString();
 
