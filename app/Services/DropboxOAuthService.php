@@ -6,12 +6,12 @@ namespace App\Services;
 
 use App\Models\DropboxToken;
 use Illuminate\Contracts\Encryption\DecryptException;
-use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
-final class DropboxOAuthService
+final readonly class DropboxOAuthService
 {
     private string $appKey;
 
@@ -21,9 +21,13 @@ final class DropboxOAuthService
 
     public function __construct()
     {
-        $this->appKey = (string) config('services.dropbox.app_key');
-        $this->appSecret = (string) config('services.dropbox.app_secret');
-        $this->redirectUri = (string) config('services.dropbox.redirect_uri');
+        $appKey = config('services.dropbox.app_key');
+        $appSecret = config('services.dropbox.app_secret');
+        $redirectUri = config('services.dropbox.redirect_uri');
+
+        $this->appKey = is_string($appKey) ? $appKey : '';
+        $this->appSecret = is_string($appSecret) ? $appSecret : '';
+        $this->redirectUri = is_string($redirectUri) ? $redirectUri : '';
     }
 
     public function buildAuthorizationUrl(string $state): string
@@ -62,10 +66,10 @@ final class DropboxOAuthService
                 'redirect_uri' => $this->redirectUri,
             ]);
 
-        $payload = $response->json();
+        $payload = $this->associativeArray($response->json());
 
-        if (! $response->successful() || ! is_array($payload)) {
-            $errorSummary = is_array($payload) ? ($payload['error_summary'] ?? $payload['error_description'] ?? 'Unknown error') : 'Unknown error';
+        if (! $response->successful()) {
+            $errorSummary = $this->errorSummary($payload);
             Log::error('Dropbox OAuth authorization code exchange failed.', [
                 'http_code' => $response->status(),
                 'error_summary' => $errorSummary,
@@ -98,10 +102,10 @@ final class DropboxOAuthService
             [
                 'access_token' => $accessToken,
                 'refresh_token' => $refreshToken,
-                'expires_at' => Carbon::now()->addSeconds($expiresIn),
-                'token_type' => (string) ($payload['token_type'] ?? 'bearer'),
-                'scope' => $payload['scope'] ?? null,
-                'account_id' => $payload['account_id'] ?? null,
+                'expires_at' => Date::now()->addSeconds($expiresIn),
+                'token_type' => $this->stringValue($payload, 'token_type', 'bearer'),
+                'scope' => $this->nullableStringValue($payload, 'scope'),
+                'account_id' => $this->nullableStringValue($payload, 'account_id'),
             ],
         );
 
@@ -124,9 +128,11 @@ final class DropboxOAuthService
 
         $currentAccessToken = $this->readEncryptedTokenValue($storedToken, 'access_token');
 
-        if (! $forceRefresh && $currentAccessToken !== '' && $storedToken->expires_at->gt(now()->addSeconds(60))) {
+        $expiresAt = $storedToken->expires_at;
+
+        if (! $forceRefresh && $currentAccessToken !== '' && $expiresAt !== null && $expiresAt->gt(now()->addSeconds(60))) {
             Log::info('Using existing valid Dropbox access token.', [
-                'expires_at' => $storedToken->expires_at?->toIso8601String(),
+                'expires_at' => $expiresAt->toIso8601String(),
             ]);
 
             return $currentAccessToken;
@@ -160,10 +166,10 @@ final class DropboxOAuthService
                 'client_secret' => $this->appSecret,
             ]);
 
-        $payload = $response->json();
+        $payload = $this->associativeArray($response->json());
 
         if (! $response->successful()) {
-            $errorSummary = is_array($payload) ? ($payload['error_summary'] ?? $payload['error_description'] ?? 'Unknown error') : 'Unknown error';
+            $errorSummary = $this->errorSummary($payload);
 
             Log::error('Dropbox token refresh failed: API error', [
                 'http_code' => $response->status(),
@@ -174,23 +180,23 @@ final class DropboxOAuthService
             throw new RuntimeException('Unable to refresh Dropbox access token: '.$errorSummary);
         }
 
-        $accessToken = is_array($payload) ? ($payload['access_token'] ?? null) : null;
+        $accessToken = $this->nullableStringValue($payload, 'access_token');
 
-        if (! is_string($accessToken) || $accessToken === '') {
+        if ($accessToken === null || $accessToken === '') {
             Log::error('Dropbox token refresh response missing access token.');
             throw new RuntimeException('Dropbox token refresh response did not include an access token.');
         }
 
         $expiresIn = $this->resolveExpiresIn($payload, 'token refresh');
-        $rotatedRefreshToken = is_array($payload) ? ($payload['refresh_token'] ?? null) : null;
+        $rotatedRefreshToken = $this->nullableStringValue($payload, 'refresh_token');
 
         $storedToken->forceFill([
             'access_token' => $accessToken,
             'refresh_token' => is_string($rotatedRefreshToken) && $rotatedRefreshToken !== '' ? $rotatedRefreshToken : $refreshToken,
-            'expires_at' => Carbon::now()->addSeconds($expiresIn),
-            'token_type' => is_array($payload) ? (string) ($payload['token_type'] ?? 'bearer') : 'bearer',
-            'scope' => is_array($payload) ? ($payload['scope'] ?? $storedToken->scope) : $storedToken->scope,
-            'account_id' => is_array($payload) ? ($payload['account_id'] ?? $storedToken->account_id) : $storedToken->account_id,
+            'expires_at' => Date::now()->addSeconds($expiresIn),
+            'token_type' => $this->stringValue($payload, 'token_type', 'bearer'),
+            'scope' => $this->nullableStringValue($payload, 'scope') ?? $storedToken->scope,
+            'account_id' => $this->nullableStringValue($payload, 'account_id') ?? $storedToken->account_id,
         ])->save();
 
         Log::info('Dropbox access token refresh succeeded.', [
@@ -205,6 +211,7 @@ final class DropboxOAuthService
     {
         if ($accessToken === '') {
             Log::warning('Skipping Dropbox account email lookup because access token is empty.');
+
             return null;
         }
 
@@ -223,16 +230,56 @@ final class DropboxOAuthService
             return null;
         }
 
-        $payload = $response->json();
-        $email = is_array($payload) ? ($payload['email'] ?? null) : null;
+        $payload = $this->associativeArray($response->json());
+        $email = $this->nullableStringValue($payload, 'email');
 
-        if (! is_string($email) || $email === '') {
+        if ($email === null || $email === '') {
             Log::warning('Dropbox account email was not present in account lookup response.');
         } else {
             Log::info('Resolved Dropbox account email for success view.', ['email' => $email]);
         }
 
-        return is_string($email) && $email !== '' ? $email : null;
+        return $email !== '' ? $email : null;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function stringValue(array $payload, string $key, string $default = ''): string
+    {
+        $value = $payload[$key] ?? $default;
+
+        return is_scalar($value) ? (string) $value : $default;
+    }
+
+    /** @return array<string, mixed> */
+    private function associativeArray(mixed $payload): array
+    {
+        if (! is_array($payload)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($payload as $key => $value) {
+            if (is_string($key)) {
+                $normalized[$key] = $value;
+            }
+        }
+
+        return $normalized;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function nullableStringValue(array $payload, string $key): ?string
+    {
+        $value = $payload[$key] ?? null;
+
+        return is_scalar($value) ? (string) $value : null;
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function errorSummary(array $payload): string
+    {
+        return $this->stringValue($payload, 'error_summary', $this->stringValue($payload, 'error_description', 'Unknown error'));
     }
 
     private function assertAuthorizationConfiguration(): void
@@ -259,16 +306,19 @@ final class DropboxOAuthService
     }
 
     /**
-     * @param  array<string, mixed>|mixed  $payload
+     * @param  array<string, mixed>  $payload
      */
-    private function resolveExpiresIn(mixed $payload, string $context): int
+    private function resolveExpiresIn(array $payload, string $context): int
     {
-        $expiresIn = is_array($payload) ? (int) ($payload['expires_in'] ?? 0) : 0;
+        $rawExpiresIn = $payload['expires_in'] ?? null;
+        $expiresIn = is_int($rawExpiresIn)
+            ? $rawExpiresIn
+            : (is_string($rawExpiresIn) && ctype_digit($rawExpiresIn) ? (int) $rawExpiresIn : 0);
 
         if ($expiresIn <= 0) {
             Log::error('Dropbox OAuth response included an invalid expires_in value.', [
                 'context' => $context,
-                'expires_in' => is_array($payload) ? ($payload['expires_in'] ?? null) : null,
+                'expires_in' => $rawExpiresIn,
             ]);
 
             throw new RuntimeException('Dropbox '.$context.' response included an invalid expires_in value.');
@@ -288,10 +338,7 @@ final class DropboxOAuthService
                 'message' => $decryptException->getMessage(),
             ]);
 
-            throw new RuntimeException(
-                'Stored Dropbox credentials cannot be decrypted. If APP_KEY changed, run dropbox:rewrap-tokens with --from-key or re-authorize via /dropbox/authorize.',
-                previous: $decryptException,
-            );
+            throw new RuntimeException('Stored Dropbox credentials cannot be decrypted. If APP_KEY changed, run dropbox:rewrap-tokens with --from-key or re-authorize via /dropbox/authorize.', $decryptException->getCode(), previous: $decryptException);
         }
 
         if (! is_string($value)) {

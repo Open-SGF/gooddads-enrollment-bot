@@ -1,24 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Data;
 
 use App\Enums\Ethnicity;
 use App\Enums\MaritalStatus;
-use App\Rules\UsPhoneNumber;
 use Carbon\Carbon;
 use Spatie\LaravelData\Attributes\MapInputName;
-use Spatie\LaravelData\Attributes\Validation\Enum;
-use Spatie\LaravelData\Attributes\Validation\Max;
-use Spatie\LaravelData\Attributes\Validation\Uuid;
-use Spatie\LaravelData\Attributes\WithCast;
-use Spatie\LaravelData\Casts\DateTimeInterfaceCast;
 use Spatie\LaravelData\Data;
 use Spatie\LaravelData\Mappers\CamelCaseMapper;
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
-#[TypeScript]
 #[MapInputName(CamelCaseMapper::class)]
-class ParticipantData extends Data
+final class ParticipantData extends Data
 {
     public function __construct(
         public readonly string $id,
@@ -43,6 +37,5 @@ class ParticipantData extends Data
         public readonly ?Carbon $intakeDate,
         public readonly Carbon $createdAt,
         public readonly Carbon $updatedAt,
-    ) {
-    }
+    ) {}
 }

@@ -4,12 +4,27 @@ declare(strict_types=1);
 
 namespace App\Services;
 
-use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
-final class NeonApiService
+/**
+ * @phpstan-type NeonScalar bool|float|int|string|null
+ * @phpstan-type NeonField array{value?: NeonScalar, displayValue?: NeonScalar}
+ * @phpstan-type NeonRecord array<string, NeonField>
+ * @phpstan-type NeonEnvelope array{records: list<NeonRecord>, totalResults?: int, status?: string, errorMessage?: string, errorCode?: int}
+ * @phpstan-type NeonParticipantPayload array{
+ *   contactInfo: NeonEnvelope,
+ *   children: NeonEnvelope,
+ *   disclosure: NeonEnvelope,
+ *   assessment: NeonEnvelope,
+ *   survey: NeonEnvelope,
+ *   servicePlan: NeonEnvelope
+ * }
+ */
+final readonly class NeonApiService
 {
     private ?string $baseUrl;
 
@@ -17,34 +32,28 @@ final class NeonApiService
 
     public function __construct()
     {
-        $this->baseUrl = config('services.neon.base_url');
-        $this->apiKey = config('services.neon.api_key');
+        $baseUrl = config('services.neon.base_url');
+        $apiKey = config('services.neon.api_key');
+
+        $this->baseUrl = is_string($baseUrl) && $baseUrl !== '' ? $baseUrl : null;
+        $this->apiKey = is_string($apiKey) && $apiKey !== '' ? $apiKey : null;
     }
 
-    private function ensureConfigured(): void
-    {
-        if (!$this->baseUrl) {
-            throw new \RuntimeException('NEON_BASE_URL is not configured.');
-        }
-
-        if (!$this->apiKey) {
-            throw new \RuntimeException('NEON_API_KEY is not configured.');
-        }
-    }
-
+    /** @return array<string, array<string, NeonEnvelope>> */
     public function getTodaysParticipantIds(): array
     {
-        $todaysDate = Carbon::today('America/Chicago')->format('Y-m-d');
+        $todaysDate = Date::today('America/Chicago')->format('Y-m-d');
         $todaysDate = '2026-02-24';
-        Log::info("🔍 Collecting participant records that have been added or updated today - {$todaysDate}....");
+        Log::info(sprintf('🔍 Collecting participant records that have been added or updated today - %s....', $todaysDate));
         // $toReturn = $this->getParticipantIdsByDate($todaysDate);
         $toReturn = $this->getFullParticipantRecordsByDate($todaysDate);
         $count = count($toReturn);
-        Log::info("📋 Found {$count} new or updated participant records.");
+        Log::info(sprintf('📋 Found %d new or updated participant records.', $count));
 
         return $toReturn;
     }
 
+    /** @return NeonRecord */
     public function getParticipant(int $id): array
     {
         $fields = [
@@ -98,7 +107,7 @@ final class NeonApiService
             'updatedDate',
         ];
 
-        $url = "{$this->baseUrl}/data/persons/{$id}";
+        $url = sprintf('%s/data/persons/%d', $this->baseUrl, $id);
 
         $response = Http::get($url, [
             'fields' => json_encode($fields),
@@ -107,12 +116,13 @@ final class NeonApiService
 
         $response->throw(); // will raise exception if not 200
 
-        return $response->json();
+        return $this->normalizeRecord($response->json());
     }
 
+    /** @return NeonEnvelope */
     public function fetchPersonContactInfo(string $personId, bool $useWhereClause): array
     {
-        return $this->fetch("persons/{$personId}", [
+        return $this->fetch('persons/'.$personId, [
             'firstName',
             'lastName',
             'regions_id',
@@ -138,6 +148,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
+    /** @return NeonEnvelope */
     public function fetchPersonChildren(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_applications_children', [
@@ -148,6 +159,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
+    /** @return NeonEnvelope */
     public function fetchPersonDisclosure(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_applications', [
@@ -173,6 +185,7 @@ final class NeonApiService
             $useWhereClause);
     }
 
+    /** @return NeonEnvelope */
     public function fetchPersonAssessment(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_assessment_worksheet', [
@@ -196,6 +209,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
+    /** @return NeonEnvelope */
     public function fetchPersonSurvey(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_introductory_survey', [
@@ -211,6 +225,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
+    /** @return NeonEnvelope */
     public function fetchPersonServicePlan(string $personId, bool $useWhereClause): array
     {
         return $this->fetch('persons_service_plan', [
@@ -271,6 +286,7 @@ final class NeonApiService
         ], $personId, $useWhereClause);
     }
 
+    /** @return NeonParticipantPayload */
     public function buildFullParticipantRecord(string $personId): array
     {
         return [
@@ -283,50 +299,7 @@ final class NeonApiService
         ];
     }
 
-    private function fetch(string $endpoint, array $fields = [], ?string $personId = null, bool $useWhereClause = true): array
-    {
-        $this->ensureConfigured();
-
-        $url = "{$this->baseUrl}/data/{$endpoint}";
-
-        $params = [
-            'key' => $this->apiKey,
-        ];
-
-        if (! empty($fields)) {
-            $params['fields'] = json_encode($fields);
-        }
-
-        // Add WHERE clause only if requested
-        if ($personId !== null && $useWhereClause) {
-            $params['where'] = json_encode([
-                'whereType' => 'AND',
-                'clauses' => [
-                    [
-                        'fieldName' => 'persons_id',
-                        'operator' => '=',
-                        'operand' => $personId,
-                        'type' => 'id',
-                    ],
-                ],
-            ]);
-        }
-
-        $response = Http::get($url, $params);
-        $response->throw();
-
-        $responseJson = $response->json() ?? [];
-
-        if (isset($responseJson['status']) && $responseJson['status'] === 'error') {
-            throw new Exception(
-                $responseJson['errorMessage'] ?? 'Unknown error',
-                $responseJson['errorCode'] ?? 0
-            );
-        }
-
-        return $responseJson;
-    }
-
+    /** @return array<string, array<string, NeonEnvelope>> */
     public function getFullParticipantRecordsByDate(string $filterDate): array
     {
         $this->ensureConfigured();
@@ -507,15 +480,21 @@ final class NeonApiService
             ],
         ]);
 
-        $baseUrl = "{$this->baseUrl}/data";
-        $pageSize = config('services.neon.page_size', 200);
+        $baseUrl = $this->baseUrl.'/data';
+        $pageSizeConfig = config('services.neon.page_size', 200);
+        $pageSize = is_int($pageSizeConfig) ? $pageSizeConfig : 200;
 
         // Fetch all records from each table, grouped by persons_id
         $tableRecords = [];
 
         foreach ($tableFieldMap as $table => $tableConfig) {
             $page = 1;
+            /** @var list<NeonRecord> $allRecords */
             $allRecords = [];
+            /** @var NeonEnvelope $data */
+            $data = ['records' => []];
+            /** @var list<NeonRecord> $records */
+            $records = [];
 
             do {
                 $params = [
@@ -526,21 +505,13 @@ final class NeonApiService
                     'pageSize' => $pageSize,
                 ];
 
-                $url = "{$baseUrl}/{$table}";
+                $url = sprintf('%s/%s', $baseUrl, $table);
 
                 $response = Http::get($url, $params);
                 $response->throw();
-                $data = $response->json() ?? [];
+                $data = $this->parseEnvelope($response->json());
+                $records = $data['records'];
 
-                if (isset($data['status']) && $data['status'] === 'error') {
-                    throw new Exception(
-                        $data['errorMessage'] ?? 'Unknown error',
-                        $data['errorCode'] ?? 0
-                    );
-                }
-
-                $records = $data['records'] ?? [];
-                
                 $allRecords = array_merge($allRecords, $records);
                 $page++;
             } while (! empty($records) && count($allRecords) < ($data['totalResults'] ?? 0));
@@ -548,23 +519,17 @@ final class NeonApiService
             // Group records by persons_id
             $grouped = [];
             foreach ($allRecords as $record) {
-                $personId = isset($record['persons_id']['value'])
-                    ? (string) $record['persons_id']['value']
-                    : null;
+                $personId = $this->recordPersonId($record);
                 if ($personId === null) {
                     continue;
                 }
 
-                if ($tableConfig['multi']) {
-                    $grouped[$personId][] = $record;
-                } else {
-                    $grouped[$personId] = $record;
-                }
+                $grouped[$personId] ??= [];
+                $grouped[$personId][] = $record;
             }
 
             $tableRecords[$table] = [
                 'key' => $tableConfig['key'],
-                'multi' => $tableConfig['multi'],
                 'data' => $grouped,
             ];
         }
@@ -572,7 +537,7 @@ final class NeonApiService
         // Build per-table participant ID lists (table names are retained as keys for debugging).
         $personIdSets = [];
         foreach ($tableRecords as $table => $tableData) {
-            $personIdSets[$table] = array_map('strval', array_keys($tableData['data']));
+            $personIdSets[$table] = array_map(strval(...), array_keys($tableData['data']));
         }
 
         // Build all/complete/incomplete IDs without variadic unpacking to avoid named-arg issues.
@@ -600,29 +565,27 @@ final class NeonApiService
 
         // Fallback fetchers for tables missing from a person's bulk data
         $fetchFallback = [
-            'persons'                        => fn (string $id) => $this->fetchPersonContactInfo($id, false),
-            'persons_applications_children'  => fn (string $id) => $this->fetchPersonChildren($id, true),
-            'persons_applications'           => fn (string $id) => $this->fetchPersonDisclosure($id, true),
-            'persons_assessment_worksheet'   => fn (string $id) => $this->fetchPersonAssessment($id, true),
-            'persons_introductory_survey'    => fn (string $id) => $this->fetchPersonSurvey($id, true),
-            'persons_service_plan'           => fn (string $id) => $this->fetchPersonServicePlan($id, true),
+            'persons' => fn (string $id): array => $this->fetchPersonContactInfo($id, false),
+            'persons_applications_children' => fn (string $id): array => $this->fetchPersonChildren($id, true),
+            'persons_applications' => fn (string $id): array => $this->fetchPersonDisclosure($id, true),
+            'persons_assessment_worksheet' => fn (string $id): array => $this->fetchPersonAssessment($id, true),
+            'persons_introductory_survey' => fn (string $id): array => $this->fetchPersonSurvey($id, true),
+            'persons_service_plan' => fn (string $id): array => $this->fetchPersonServicePlan($id, true),
         ];
 
         // Build the person_id -> full record map
         $fullRecords = [];
 
-        // Wraps a bulk-fetched value into the same {records:[...]} envelope that fetch() returns.
-        $wrapBulk = function (mixed $value, bool $multi): array {
-            return ['records' => $multi ? $value : [$value]];
-        };
-
         // Already-complete persons: wrap bulk data to match fetch() response shape
         foreach ($completePersonIds as $personId) {
             $personId = (string) $personId;
             $record = [];
-            foreach ($tableRecords as $table => $tableData) {
-                $record[$tableData['key']] = $wrapBulk($tableData['data'][$personId], $tableData['multi']);
+            foreach ($tableRecords as $tableData) {
+                /** @var list<NeonRecord> $recordsForPerson */
+                $recordsForPerson = $tableData['data'][$personId];
+                $record[$tableData['key']] = ['records' => $recordsForPerson];
             }
+
             $fullRecords[$personId] = $record;
         }
 
@@ -632,59 +595,163 @@ final class NeonApiService
             $record = [];
             foreach ($tableRecords as $table => $tableData) {
                 $record[$tableData['key']] = isset($tableData['data'][$personId])
-                    ? $wrapBulk($tableData['data'][$personId], $tableData['multi'])
-                    : $fetchFallback[$table]((string) $personId);
+                    ? ['records' => $tableData['data'][$personId]]
+                    : $fetchFallback[$table]($personId);
             }
+
             $fullRecords[$personId] = $record;
         }
 
         return $fullRecords;
     }
 
-    private function getParticipantIdsByDate(string $filterDate): array
+    private function ensureConfigured(): void
     {
-        $tables = ['persons', 'persons_applications_children', 'persons_applications', 'persons_assessment_worksheet', 'persons_introductory_survey', 'persons_service_plan'];
-        $fields = ['persons_id', 'entered_date', 'updated_date'];
-        $baseUrl = "{$this->baseUrl}/data";
+        throw_unless($this->baseUrl, RuntimeException::class, 'NEON_BASE_URL is not configured.');
+
+        throw_unless($this->apiKey, RuntimeException::class, 'NEON_API_KEY is not configured.');
+    }
+
+    /**
+     * @param  list<string>  $fields
+     * @return NeonEnvelope
+     */
+    private function fetch(string $endpoint, array $fields = [], ?string $personId = null, bool $useWhereClause = true): array
+    {
+        $this->ensureConfigured();
+
+        $url = sprintf('%s/data/%s', $this->baseUrl, $endpoint);
 
         $params = [
             'key' => $this->apiKey,
         ];
 
-        $params['fields'] = json_encode($fields);
-
-        $params['where'] = json_encode([
-            'whereType' => 'OR',
-            'clauses' => [
-                [
-                    'fieldName' => 'enteredDate',
-                    'operator' => '>=',
-                    'operand' => $filterDate,
-                ],
-                [
-                    'fieldName' => 'updatedDate',
-                    'operator' => '>=',
-                    'operand' => $filterDate,
-                ],
-            ],
-        ]);
-
-        $participantIds = [];
-
-        foreach ($tables as $table) {
-            $url = "{$baseUrl}/$table";
-            $response = Http::get($url, $params);
-            $data = $response->json() ?? [];
-            $records = $data['records'] ?? [];
-
-            if (! empty($records)) {
-                $personsIds = array_column($records, 'persons_id');
-                $newIds = array_column($personsIds, 'value');
-                $participantIds = array_unique(array_merge($participantIds, $newIds));
-            }
-
+        if ($fields !== []) {
+            $params['fields'] = json_encode($fields);
         }
 
-        return $participantIds;
+        // Add WHERE clause only if requested
+        if ($personId !== null && $useWhereClause) {
+            $params['where'] = json_encode([
+                'whereType' => 'AND',
+                'clauses' => [
+                    [
+                        'fieldName' => 'persons_id',
+                        'operator' => '=',
+                        'operand' => $personId,
+                        'type' => 'id',
+                    ],
+                ],
+            ]);
+        }
+
+        $response = Http::get($url, $params);
+        $response->throw();
+
+        return $this->parseEnvelope($response->json());
+    }
+
+    /** @return NeonEnvelope */
+    private function parseEnvelope(mixed $responseJson): array
+    {
+        $response = is_array($responseJson) ? $responseJson : [];
+
+        if (($response['status'] ?? null) === 'error') {
+            $message = is_string($response['errorMessage'] ?? null) ? $response['errorMessage'] : 'Unknown error';
+            $code = is_int($response['errorCode'] ?? null) ? $response['errorCode'] : 0;
+
+            throw new Exception($message, $code);
+        }
+
+        $records = [];
+        $responseRecords = $response['records'] ?? [];
+
+        if (! is_array($responseRecords)) {
+            $responseRecords = [];
+        }
+
+        foreach ($responseRecords as $record) {
+            $records[] = $this->normalizeRecord($record);
+        }
+
+        $envelope = ['records' => $records];
+
+        if (is_int($response['totalResults'] ?? null)) {
+            $envelope['totalResults'] = $response['totalResults'];
+        }
+
+        if (is_string($response['status'] ?? null)) {
+            $envelope['status'] = $response['status'];
+        }
+
+        if (is_string($response['errorMessage'] ?? null)) {
+            $envelope['errorMessage'] = $response['errorMessage'];
+        }
+
+        if (is_int($response['errorCode'] ?? null)) {
+            $envelope['errorCode'] = $response['errorCode'];
+        }
+
+        return $envelope;
+    }
+
+    /** @return NeonRecord */
+    private function normalizeRecord(mixed $record): array
+    {
+        if (! is_array($record)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($record as $key => $field) {
+            if (! is_string($key)) {
+                continue;
+            }
+
+            if (! is_array($field)) {
+                continue;
+            }
+
+            $normalized[$key] = $this->normalizeField($field);
+        }
+
+        return $normalized;
+    }
+
+    /** @param NeonRecord $record */
+    private function recordPersonId(array $record): ?string
+    {
+        $personField = $record['persons_id'] ?? [];
+        $value = $personField['value'] ?? null;
+
+        return is_scalar($value) ? (string) $value : null;
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $field
+     * @return NeonField
+     */
+    private function normalizeField(array $field): array
+    {
+        $value = $field['value'] ?? null;
+        $displayValue = $field['displayValue'] ?? null;
+
+        $hasScalarValue = is_bool($value) || is_float($value) || is_int($value) || is_string($value) || $value === null;
+        $hasScalarDisplayValue = is_bool($displayValue) || is_float($displayValue) || is_int($displayValue) || is_string($displayValue) || $displayValue === null;
+
+        if ($hasScalarValue && $hasScalarDisplayValue) {
+            return ['value' => $value, 'displayValue' => $displayValue];
+        }
+
+        if ($hasScalarValue) {
+            return ['value' => $value];
+        }
+
+        if ($hasScalarDisplayValue) {
+            return ['displayValue' => $displayValue];
+        }
+
+        return [];
     }
 }

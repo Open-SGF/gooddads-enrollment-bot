@@ -13,17 +13,17 @@ final readonly class ParticipantUpdateData
      */
     public function __construct(
         // Meta (not PDF fields, used for file generation)
-        public readonly string $id,
-        public readonly string $firstName,
-        public readonly string $lastName,
+        public string $id,
+        public string $firstName,
+        public string $lastName,
 
         // Enrollment form data
-        public readonly ContactInfoDTO $contactInfo,
-        public readonly array $children,
-        public readonly DisclosureDTO $disclosure,
-        public readonly AssessmentDTO $assessment,
-        public readonly SurveyDTO $survey,
-        public readonly ServicePlanDTO $servicePlan
+        public ContactInfoDTO $contactInfo,
+        public array $children,
+        public DisclosureDTO $disclosure,
+        public AssessmentDTO $assessment,
+        public SurveyDTO $survey,
+        public ServicePlanDTO $servicePlan
     ) {}
 
     /**
@@ -34,6 +34,7 @@ final readonly class ParticipantUpdateData
         return $this->firstName.' '.$this->lastName;
     }
 
+    /** @return array<string, string|null> */
     public function toPdfArray(): array
     {
 
@@ -59,15 +60,16 @@ final readonly class ParticipantUpdateData
         return array_merge(...$arrays);
     }
 
+    /** @return array<string, list<string>> */
     public function getMissingFields(): array
     {
         $missing = [];
 
         $dtos = [
             'contactInfo' => $this->contactInfo,
-            'disclosure'  => $this->disclosure,
-            'assessment'  => $this->assessment,
-            'survey'      => $this->survey,
+            'disclosure' => $this->disclosure,
+            'assessment' => $this->assessment,
+            'survey' => $this->survey,
             'servicePlan' => $this->servicePlan,
         ];
 
@@ -77,20 +79,20 @@ final readonly class ParticipantUpdateData
             }
         }
 
-        if (empty($this->children)) {
+        if ($this->children === []) {
             $missing['children'] = ['children array is empty'];
         } else {
             foreach ($this->children as $index => $child) {
                 if ($child->hasMissingFields()) {
-                    $missing["child_{$index}"] = $child->getMissingFields();
+                    $missing['child_'.$index] = $child->getMissingFields();
                 }
             }
         }
 
-        if (!empty($missing)) {
+        if ($missing !== []) {
             Log::warning('ParticipantUpdateData: missing fields detected', [
                 'participant_id' => $this->id,
-                'missing'        => $missing,
+                'missing' => $missing,
             ]);
         }
 
@@ -99,6 +101,6 @@ final readonly class ParticipantUpdateData
 
     public function hasMissingFields(): bool
     {
-        return !empty($this->getMissingFields());
+        return $this->getMissingFields() !== [];
     }
 }

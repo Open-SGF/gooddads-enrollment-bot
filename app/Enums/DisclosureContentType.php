@@ -1,14 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Enums;
 
 use App\Concerns\EnumDisplayArray;
-use Spatie\TypeScriptTransformer\Attributes\TypeScript;
 
-#[TypeScript]
 enum DisclosureContentType: string
 {
     use EnumDisplayArray;
+
     case ENTIRE_FILE = 'entireFile';
     case LICENSURE_INFORMATION = 'licensureInformation';
     case MEDICAL_PSYCHIATRIC_RECORDS = 'medicalPsychiatricRecords';

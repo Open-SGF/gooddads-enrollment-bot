@@ -10,15 +10,18 @@ use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Override;
 use RuntimeException;
 use Throwable;
 
 final class RewrapDropboxTokens extends Command
 {
+    #[Override]
     protected $signature = 'dropbox:rewrap-tokens
         {--from-key= : Previous APP_KEY (e.g. base64:...) used to decrypt existing token values}
         {--force : Skip confirmation prompt}';
 
+    #[Override]
     protected $description = 'Re-encrypt Dropbox token values with the current APP_KEY (useful after APP_KEY rotation)';
 
     public function handle(): int
@@ -70,8 +73,10 @@ final class RewrapDropboxTokens extends Command
 
         try {
             foreach ($rows as $row) {
-                $accessToken = $oldEncrypter->decryptString((string) $row->access_token);
-                $refreshToken = $oldEncrypter->decryptString((string) $row->refresh_token);
+                $accessTokenValue = is_string($row->access_token) ? $row->access_token : '';
+                $refreshTokenValue = is_string($row->refresh_token) ? $row->refresh_token : '';
+                $accessToken = $oldEncrypter->decryptString($accessTokenValue);
+                $refreshToken = $oldEncrypter->decryptString($refreshTokenValue);
 
                 DB::table('dropbox_tokens')
                     ->where('id', $row->id)
@@ -106,16 +111,13 @@ final class RewrapDropboxTokens extends Command
 
     private function buildEncrypterFromAppKey(string $appKey): Encrypter
     {
-        $cipher = (string) config('app.cipher', 'AES-256-CBC');
-        $decodedKey = str_starts_with($appKey, 'base64:') ? base64_decode(substr($appKey, 7), true) : $appKey;
+        $cipherConfig = config('app.cipher', 'AES-256-CBC');
+        $cipher = is_string($cipherConfig) && $cipherConfig !== '' ? $cipherConfig : 'AES-256-CBC';
+        $decodedKey = str_starts_with($appKey, 'base64:') ? base64_decode(mb_substr($appKey, 7), true) : $appKey;
 
-        if (! is_string($decodedKey) || $decodedKey === '') {
-            throw new RuntimeException('Unable to decode --from-key.');
-        }
+        throw_if(! is_string($decodedKey) || $decodedKey === '', RuntimeException::class, 'Unable to decode --from-key.');
 
-        if (! Encrypter::supported($decodedKey, $cipher)) {
-            throw new RuntimeException('The provided --from-key is not valid for cipher '.$cipher.'.');
-        }
+        throw_unless(Encrypter::supported($decodedKey, $cipher), RuntimeException::class, 'The provided --from-key is not valid for cipher '.$cipher.'.');
 
         return new Encrypter($decodedKey, $cipher);
     }

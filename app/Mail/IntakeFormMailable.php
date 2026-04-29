@@ -14,7 +14,8 @@ use Illuminate\Queue\SerializesModels;
 
 final class IntakeFormMailable extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable;
+    use SerializesModels;
 
     /**
      * Create a new message instance.
@@ -27,7 +28,7 @@ final class IntakeFormMailable extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Intake Form for '.($this->participant->fullName ?? 'Participant')
+            subject: 'Intake Form for '.$this->participant->fullName()
         );
     }
 

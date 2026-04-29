@@ -11,14 +11,17 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class DropboxBasicAuth
 {
+    /** @param  Closure(Request): Response  $next */
     public function handle(Request $request, Closure $next): Response
     {
         if (! (bool) config('services.dropbox.require_basic_auth', true)) {
             return $next($request);
         }
 
-        $expectedUsername = (string) config('services.dropbox.basic_auth_user', '');
-        $expectedPassword = (string) config('services.dropbox.basic_auth_password', '');
+        $expectedUsernameConfig = config('services.dropbox.basic_auth_user', '');
+        $expectedPasswordConfig = config('services.dropbox.basic_auth_password', '');
+        $expectedUsername = is_string($expectedUsernameConfig) ? $expectedUsernameConfig : '';
+        $expectedPassword = is_string($expectedPasswordConfig) ? $expectedPasswordConfig : '';
 
         if ($expectedUsername === '' || $expectedPassword === '') {
             Log::error('Dropbox OAuth basic auth is enabled but credentials are not configured.');
