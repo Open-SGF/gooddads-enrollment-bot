@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Enums;
 
 use App\Concerns\EnumDisplayArray;
@@ -7,6 +9,7 @@ use App\Concerns\EnumDisplayArray;
 enum Ethnicity: string
 {
     use EnumDisplayArray;
+
     case White = 'white';
     case AfricanAmerican = 'africanAmerican';
     case NativeAmerican = 'nativeAmerican';
@@ -25,7 +28,6 @@ enum Ethnicity: string
             self::NativeAmerican => 'American Indian or Alaska Native',
             self::PacificIslander => 'Native Hawaiian or Islander',
             self::NoAnswer => 'Prefer Not To Answer',
-            default => $this->defaultDisplayValue(),
         };
     }
 }

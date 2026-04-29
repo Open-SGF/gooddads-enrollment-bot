@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Concerns;
 
 use BackedEnum as Enum;
@@ -9,6 +11,28 @@ use BackedEnum as Enum;
  */
 trait EnumDisplayArray
 {
+    /**
+     * @param  list<self>  $displayOnly
+     * @return array<string, string>
+     */
+    public static function displayArray(array $displayOnly = []): array
+    {
+        $displayValues = $displayOnly !== [] ? $displayOnly : self::cases();
+        $values = [];
+
+        foreach ($displayValues as $case) {
+            $values[$case->value] = $case->displayValue();
+        }
+
+        return $values;
+    }
+
+    /** @return list<string> */
+    public static function values(): array
+    {
+        return array_column(self::cases(), 'value');
+    }
+
     public function defaultDisplayValue(): string
     {
         return str($this->value)
@@ -23,29 +47,5 @@ trait EnumDisplayArray
     public function displayValue(): string
     {
         return $this->defaultDisplayValue();
-    }
-
-    public static function displayArray(array $displayOnly = []): array
-    {
-        $displayValues = count($displayOnly) > 0 ? $displayOnly : self::cases();
-
-        if (! method_exists(self::class, 'cases')) {
-            return [];
-        }
-
-        $cases = collect($displayValues);
-
-        return $cases
-            ->mapWithKeys(function ($case) {
-                return [
-                    $case->value => $case->displayValue(),
-                ];
-            })
-            ->toArray();
-    }
-
-    public static function values(): array
-    {
-        return array_column(self::cases(), 'value');
     }
 }

@@ -9,13 +9,16 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use Override;
 
 final class ResetDropboxAuth extends Command
 {
+    #[Override]
     protected $signature = 'dropbox:reset-auth
         {--with-sessions : Also clear the sessions table}
         {--force : Skip the confirmation prompt}';
 
+    #[Override]
     protected $description = 'Clear stored Dropbox OAuth tokens to force a clean re-authorization flow';
 
     public function handle(): int
@@ -36,7 +39,8 @@ final class ResetDropboxAuth extends Command
             }
         }
 
-        $deletedTokens = DropboxToken::query()->delete();
+        $deletedTokensRaw = DropboxToken::query()->delete();
+        $deletedTokens = is_int($deletedTokensRaw) ? $deletedTokensRaw : 0;
 
         if ($deletedTokens > 0) {
             $this->info('Deleted '.$deletedTokens.' row(s) from dropbox_tokens.');

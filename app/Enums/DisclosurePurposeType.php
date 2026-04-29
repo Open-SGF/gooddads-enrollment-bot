@@ -1,13 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Enums;
 
 use App\Concerns\EnumDisplayArray;
-use Illuminate\Support\Collection;
 
 enum DisclosurePurposeType: string
 {
     use EnumDisplayArray;
+
     case ELIGIBILITY_DETERMINATION = 'eligibilityDetermination';
     case LEGAL_CONSULTATION = 'legalConsultation';
     case LEGAL_PROCEEDINGS = 'legalProceedings';

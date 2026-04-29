@@ -6,7 +6,6 @@ namespace App\Contracts;
 
 interface PdfArrayable
 {
+    /** @return array<string, string|null> */
     public function toPdfArray(): array;
 }
-
-?>

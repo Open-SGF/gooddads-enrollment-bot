@@ -11,98 +11,109 @@ use App\DTOs\DisclosureDTO;
 use App\DTOs\ParticipantUpdateData;
 use App\DTOs\ServicePlanDTO;
 use App\DTOs\SurveyDTO;
+use App\Services\NeonApiService;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Date;
 
+/**
+ * @phpstan-import-type NeonEnvelope from NeonApiService
+ * @phpstan-import-type NeonParticipantPayload from NeonApiService
+ * @phpstan-import-type NeonRecord from NeonApiService
+ */
 final class NeonDTOTransformer
 {
     private function __construct() {}
 
+    /** @phpstan-param array<string, NeonEnvelope> $participantData */
     public static function transformParticipantData(array $participantData): ParticipantUpdateData
     {
-        $contactInfo = $participantData['contactInfo']['records'][0];
+        $contactInfo = self::firstRecord($participantData['contactInfo']);
 
         return new ParticipantUpdateData(
-            id: $contactInfo['persons_id']['value'],
-            firstName: $contactInfo['firstName']['displayValue'] ?? '',
-            lastName: $contactInfo['lastName']['displayValue'] ?? '',
+            id: self::value($contactInfo, 'persons_id'),
+            firstName: self::displayValue($contactInfo, 'firstName'),
+            lastName: self::displayValue($contactInfo, 'lastName'),
             contactInfo: self::transformContactInfo($contactInfo),
-            children: self::transformChildren($participantData['children']['records'] ?? []),
-            disclosure: self::transformDisclosure($participantData['disclosure']['records'][0]),
-            assessment: self::transformAssessment($participantData['assessment']['records'][0]),
-            survey: self::transformSurvey($participantData['survey']['records'][0]),
-            servicePlan: self::transformServicePlan($participantData['servicePlan']['records'][0])
+            children: self::transformChildren($participantData['children']['records']),
+            disclosure: self::transformDisclosure(self::firstRecord($participantData['disclosure'])),
+            assessment: self::transformAssessment(self::firstRecord($participantData['assessment'])),
+            survey: self::transformSurvey(self::firstRecord($participantData['survey'])),
+            servicePlan: self::transformServicePlan(self::firstRecord($participantData['servicePlan']))
         );
-
     }
 
+    /** @phpstan-param NeonRecord $contactInfo */
     private static function transformContactInfo(array $contactInfo): ContactInfoDTO
     {
         return new ContactInfoDTO(
-            titleRegion: $contactInfo['regions_id']['displayValue'] ?? '',
-            fullName: $contactInfo['persons_id']['displayValue'] ?? '',
-            enteredDate: self::parseDateString($contactInfo['enteredDate']['value'] ?? null),
+            titleRegion: self::displayValue($contactInfo, 'regions_id'),
+            fullName: self::displayValue($contactInfo, 'persons_id'),
+            enteredDate: self::parseDateString(self::nullableValue($contactInfo, 'enteredDate')),
             address: self::buildAddress($contactInfo),
-            employer: $contactInfo['employer']['value'] ?? '',
-            tshirtSize: $contactInfo['tShirtSize']['displayValue'] ?? '',
-            phone: $contactInfo['homeCellPhone']['value'] ?? '',
-            workPhone: $contactInfo['workPhone']['value'] ?? '',
-            otherPhone: $contactInfo['otherNumber']['value'] ?? '',
-            email: $contactInfo['email']['value'] ?? '',
-            caseworkerName: $contactInfo['probationParoleCaseWorkerName']['value'] ?? '',
-            caseworkerPhone: $contactInfo['probationParoleCaseWorkerPhone']['value'] ?? '',
-            monthlyChildSupport: $contactInfo['monthlyChildSupportPayment']['displayValue'] ?? '',
-            maritalStatus: $contactInfo['maritalStatus']['displayValue'] ?? '',
-            ethnicity: $contactInfo['ethnicity']['displayValue'] ?? '',
-            contactWithChildren: self::yesNo($contactInfo['contactWithChildren']['displayValue'] ?? null),
-            childrenCustody: self::inList($contactInfo['contactType']['value'] ?? '', '763'),
-            childrenVisitation: self::inList($contactInfo['contactType']['value'] ?? '', '762'),
-            childrenPhone: self::inList($contactInfo['contactType']['value'] ?? '', '1483')
+            employer: self::nullableValue($contactInfo, 'employer'),
+            tshirtSize: self::nullableDisplayValue($contactInfo, 'tShirtSize'),
+            phone: self::nullableValue($contactInfo, 'homeCellPhone'),
+            workPhone: self::nullableValue($contactInfo, 'workPhone'),
+            otherPhone: self::nullableValue($contactInfo, 'otherNumber'),
+            email: self::nullableValue($contactInfo, 'email'),
+            caseworkerName: self::nullableValue($contactInfo, 'probationParoleCaseWorkerName'),
+            caseworkerPhone: self::nullableValue($contactInfo, 'probationParoleCaseWorkerPhone'),
+            monthlyChildSupport: self::nullableDisplayValue($contactInfo, 'monthlyChildSupportPayment'),
+            maritalStatus: self::nullableDisplayValue($contactInfo, 'maritalStatus'),
+            ethnicity: self::nullableDisplayValue($contactInfo, 'ethnicity'),
+            contactWithChildren: self::yesNo(self::nullableDisplayValue($contactInfo, 'contactWithChildren')),
+            childrenCustody: self::inList(self::value($contactInfo, 'contactType'), '763'),
+            childrenVisitation: self::inList(self::value($contactInfo, 'contactType'), '762'),
+            childrenPhone: self::inList(self::value($contactInfo, 'contactType'), '1483')
         );
     }
 
-    /** @return ChildDTO[] */
+    /**
+     * @phpstan-param list<NeonRecord> $children
+     *
+     * @return ChildDTO[]
+     */
     private static function transformChildren(array $children): array
     {
         $result = [];
         foreach ($children as $child) {
-            $dob = self::parseDate($child['dateOfBirth']['value'] ?? null);
-            $ageInYears = $dob?->diffInYears(Carbon::now());
+            $dob = self::parseDate(self::nullableValue($child, 'dateOfBirth'));
+            $ageInYears = $dob?->diffInYears(Date::now());
 
             $result[] = new ChildDTO(
-                name: mb_trim(($child['firstName']['value'] ?? '').' '.($child['lastName']['value'] ?? '')),
+                name: mb_trim(self::value($child, 'firstName').' '.self::value($child, 'lastName')),
                 age: match (true) {
                     $ageInYears === null => '',
-                    $ageInYears < 1     => 'Under 1',
-                    default             => (string) $ageInYears,
+                    $ageInYears < 1 => 'Under 1',
+                    default => (string) $ageInYears,
                 },
-                dob: $dob ? $dob->format('m/d/Y') : '',
+                dob: $dob instanceof Carbon ? $dob->format('m/d/Y') : '',
             );
         }
 
         return $result;
     }
 
+    /** @phpstan-param NeonRecord $d */
     private static function transformDisclosure(array $d): DisclosureDTO
     {
-        $divisions = explode(',', $d['division']['value'] ?? '');
-        $releaseTo = explode(',', $d['releaseTo']['value'] ?? '');
-        $purposes = explode(',', $d['purposeOfDisclosure']['value'] ?? '');
-        $disclosed = explode(',', $d['informationToBeDisclosed']['value'] ?? '');
+        $divisions = explode(',', self::value($d, 'division'));
+        $purposes = explode(',', self::value($d, 'purposeOfDisclosure'));
+        $disclosed = explode(',', self::value($d, 'informationToBeDisclosed'));
 
         return new DisclosureDTO(
-            fullName: $d['persons_id']['displayValue'] ?? '',
-            phone: $d['homeCellPhone']['value'] ?? '',
-            dob: self::parseDateString($d['dateOfBirth']['value'] ?? null),
+            fullName: self::displayValue($d, 'persons_id'),
+            phone: self::value($d, 'homeCellPhone'),
+            dob: self::parseDateString(self::nullableValue($d, 'dateOfBirth')),
             // # We should not collect this information
             // ssn:                                                null,
-            address: $d['fullAddress']['displayValue'] ?? '',
-            email: $d['email']['value'] ?? '',
+            address: self::displayValue($d, 'fullAddress'),
+            email: self::value($d, 'email'),
             authorizeDys: self::inArray('679', $divisions),
             authorizeMhd: self::inArray('684', $divisions),
             authorizeDfas: self::inArray('683', $divisions),
             authorizeMmac: self::inArray('1484', $divisions),
-            authorizeOther: isset($d['divisionOther']['value']) && $d['divisionOther']['value'] ? 'Yes' : 'Off',
-            authorizeDiscloserFormOther: $d['divisionOther']['value'] ?? null,
+            authorizeOther: self::value($d, 'divisionOther') !== '' ? 'Yes' : 'Off',
             authorizeCd: self::inArray('682', $divisions),
             authorizeDls: self::inArray('681', $divisions),
             // # This is the text field
@@ -140,44 +151,47 @@ final class NeonDTOTransformer
             eligibilityDeterminations: self::inArray('1501', $disclosed),
             substanceAbuseTreatment: self::inArray('1502', $disclosed),
             clientEmploymentRecords: self::inArray('1503', $disclosed),
-            acceptTextMessages: self::yesNo($d['acceptsTextMessage']['displayValue'] ?? null),
+            acceptTextMessages: self::yesNo(self::nullableDisplayValue($d, 'acceptsTextMessage')),
+            authorizeDiscloserFormOther: self::nullableValue($d, 'divisionOther'),
         );
     }
 
+    /** @phpstan-param NeonRecord $a */
     private static function transformAssessment(array $a): AssessmentDTO
     {
-        $otherValue = $a['other']['displayValue'] ?? null;
+        $otherValue = self::nullableDisplayValue($a, 'other');
 
         return new AssessmentDTO(
-            fullName: $a['persons_id']['displayValue'] ?? '',
-            dob: $a['dateOfBirth']['displayValue'] ?? '',
+            fullName: self::displayValue($a, 'persons_id'),
+            dob: self::displayValue($a, 'dateOfBirth'),
             // # We should not collect this information
             // ssn:                                    null,
-            eligibilityMissouriResident: self::yesNo($a['missouriResident']['displayValue'] ?? null),
-            eligibilityChildUnder18: self::yesNo($a['childUnder18']['displayValue'] ?? null),
+            eligibilityMissouriResident: self::yesNo(self::nullableDisplayValue($a, 'missouriResident')),
+            eligibilityChildUnder18: self::yesNo(self::nullableDisplayValue($a, 'childUnder18')),
             financialEligibility: 'Off', // completed by state agency, not in Neon
-            financialDriversLicence: self::yesNo($a['dL']['displayValue'] ?? null),
-            financialUtilityBill: self::yesNo($a['utilityBill']['displayValue'] ?? null),
-            financialWrittenEmployerStatement: self::yesNo($a['writtenEmployerStatement']['displayValue'] ?? null),
-            financialSsBenefitsStatement: self::yesNo($a['socialSecurityBenefitsStatement']['displayValue'] ?? null),
-            financialNoEmploymentIncome: self::yesNo($a['selfAttestationOfNoEmploymentOrIncome']['displayValue'] ?? null),
-            financialUnemploymentCompensation: self::yesNo($a['unemploymentCompensation']['displayValue'] ?? null),
+            financialDriversLicence: self::yesNo(self::nullableDisplayValue($a, 'dL')),
+            financialUtilityBill: self::yesNo(self::nullableDisplayValue($a, 'utilityBill')),
+            financialWrittenEmployerStatement: self::yesNo(self::nullableDisplayValue($a, 'writtenEmployerStatement')),
+            financialSsBenefitsStatement: self::yesNo(self::nullableDisplayValue($a, 'socialSecurityBenefitsStatement')),
+            financialNoEmploymentIncome: self::yesNo(self::nullableDisplayValue($a, 'selfAttestationOfNoEmploymentOrIncome')),
+            financialUnemploymentCompensation: self::yesNo(self::nullableDisplayValue($a, 'unemploymentCompensation')),
             financialOther: $otherValue ? 'Yes' : 'Off',
-            financialOtherDescription: $otherValue ?: null,
-            povertyMonthlyIncome: $a['hoseholdIncome']['displayValue'] ?? '',  // typo is in Neon field name
-            povertyHouseholdMembers: $a['numberOfFamilyMembersInHousehold']['value'] ?? '',
-            povertyPercentageFpl: $a['percentageOfFPL']['value'] ?? '',
+            financialOtherDescription: $otherValue,
+            povertyMonthlyIncome: self::displayValue($a, 'hoseholdIncome'), // typo is in Neon field name
+            povertyHouseholdMembers: self::value($a, 'numberOfFamilyMembersInHousehold'),
+            povertyPercentageFpl: self::value($a, 'percentageOfFPL'),
         );
     }
 
+    /** @phpstan-param NeonRecord $s */
     private static function transformSurvey(array $s): SurveyDTO
     {
-        $reasons = explode(',', $s['reasons']['value'] ?? '');
-        $howHeardAbout = explode(',', $s['hearAboutUs']['value'] ?? '');
-        $expectedGain = explode(',', $s['expectToGain']['value'] ?? '');
+        $reasons = explode(',', self::value($s, 'reasons'));
+        $howHeardAbout = explode(',', self::value($s, 'hearAboutUs'));
+        $expectedGain = explode(',', self::value($s, 'expectToGain'));
 
         return new SurveyDTO(
-            clientDob: $s['dateOfBirth']['displayValue'] ?? '',
+            clientDob: self::displayValue($s, 'dateOfBirth'),
             deliveryMethod: '', // not in Neon — filled in by participant on paper
             why: match (true) {
                 self::inArray('453', $reasons) => 'Responsible father',
@@ -187,7 +201,7 @@ final class NeonDTOTransformer
                 self::inArray('1507', $reasons) => 'Other',
                 default => 'Off',
             },
-            whyOther: $s['reasonsOther']['value'] ?? '',
+            whyOther: self::value($s, 'reasonsOther'),
             how: match (true) {
                 self::inArray('1510', $howHeardAbout) => 'Family support',
                 self::inArray('1509', $howHeardAbout) => 'Past participant',
@@ -198,7 +212,7 @@ final class NeonDTOTransformer
                 self::inArray('1514', $howHeardAbout) => 'Other',
                 default => 'Off',
             },
-            howOther: $s['hearAboutUsOther']['value'] ?? '',
+            howOther: self::value($s, 'hearAboutUsOther'),
             gain: match (true) {
                 self::inArray('1520', $expectedGain) => 'Access to mentors',
                 self::inArray('1524', $expectedGain) => 'Credit repair assistance',
@@ -215,29 +229,30 @@ final class NeonDTOTransformer
                 self::inArray('1527', $expectedGain) => 'Other',
                 default => 'Off',
             },
-            gainOther: $s['expectToGainOther']['value'] ?? '',
+            gainOther: self::value($s, 'expectToGainOther'),
         );
     }
 
+    /** @phpstan-param NeonRecord $sp */
     private static function transformServicePlan(array $sp): ServicePlanDTO
     {
         return new ServicePlanDTO(
-            participantFullName: $sp['persons_id']['displayValue'] ?? '',
-            clientNumber: $sp['clientNumber']['value'] ?? '',
+            participantFullName: self::displayValue($sp, 'persons_id'),
+            clientNumber: self::value($sp, 'clientNumber'),
             goal: '', // database appears to be missing this field per original comment
-            serviceIdentified: $sp['serviceIdentifiedByTheParticipants']['value'] ?? '',
-            strategies1: $sp['goals_custodyVisitationObj']['displayValue'] ?? '',
-            personResponsible1: $sp['goals_custodyVisitationPersonRes']['displayValue'] ?? '',
-            timeline1: $sp['goals_custodyVisitationTimeline']['displayValue'] ?? '',
-            measureOfSuccess1: $sp['goals_custodyVisitationMeasure']['value'] ?? '',
-            strategies2: $sp['goals_educationEmploymentObj']['displayValue'] ?? '',
-            personResponsible2: $sp['goals_educationEmploymentPersonRes']['displayValue'] ?? '',
-            timeline2: $sp['goals_educationEmploymentTimeline']['displayValue'] ?? '',
-            measureOfSuccess2: $sp['goals_educationEmploymentMeasure']['value'] ?? '',
-            strategies3: $sp['goals_housingTransportationObj']['displayValue'] ?? '',
-            personResponsible3: $sp['goals_housingTransportationPersonRes']['displayValue'] ?? '',
-            timeline3: $sp['goals_housingTransportationTimeline']['displayValue'] ?? '',
-            measureOfSuccess3: $sp['goals_housingTransportationMeasure']['value'] ?? '',
+            serviceIdentified: self::value($sp, 'serviceIdentifiedByTheParticipants'),
+            strategies1: self::displayValue($sp, 'goals_custodyVisitationObj'),
+            personResponsible1: self::displayValue($sp, 'goals_custodyVisitationPersonRes'),
+            timeline1: self::displayValue($sp, 'goals_custodyVisitationTimeline'),
+            measureOfSuccess1: self::value($sp, 'goals_custodyVisitationMeasure'),
+            strategies2: self::displayValue($sp, 'goals_educationEmploymentObj'),
+            personResponsible2: self::displayValue($sp, 'goals_educationEmploymentPersonRes'),
+            timeline2: self::displayValue($sp, 'goals_educationEmploymentTimeline'),
+            measureOfSuccess2: self::value($sp, 'goals_educationEmploymentMeasure'),
+            strategies3: self::displayValue($sp, 'goals_housingTransportationObj'),
+            personResponsible3: self::displayValue($sp, 'goals_housingTransportationPersonRes'),
+            timeline3: self::displayValue($sp, 'goals_housingTransportationTimeline'),
+            measureOfSuccess3: self::value($sp, 'goals_housingTransportationMeasure'),
         );
     }
 
@@ -245,7 +260,7 @@ final class NeonDTOTransformer
 
     private static function parseDate(?string $value): ?Carbon
     {
-        return $value ? Carbon::createFromFormat('Y-m-d', $value) : null;
+        return $value ? Date::createFromFormat('Y-m-d', $value) : null;
     }
 
     private static function parseDateString(?string $value): string
@@ -253,19 +268,21 @@ final class NeonDTOTransformer
         if (! $value) {
             return '';
         }
-        $date = Carbon::createFromFormat('Y-m-d', $value);
 
-        return $date ? $date->format('m/d/Y') : '';
+        $date = Date::createFromFormat('Y-m-d', $value);
+
+        return $date instanceof Carbon ? $date->format('m/d/Y') : '';
     }
 
+    /** @phpstan-param NeonRecord $c */
     private static function buildAddress(array $c): string
     {
         return mb_trim(implode(' ', array_filter([
-            $c['address1']['value'] ?? '',
-            $c['address2']['value'] ?? '',
-            $c['city']['value'] ?? '',
-            $c['state']['displayValue'] ?? '',
-            $c['zip']['value'] ?? '',
+            self::value($c, 'address1'),
+            self::value($c, 'address2'),
+            self::value($c, 'city'),
+            self::displayValue($c, 'state'),
+            self::value($c, 'zip'),
         ])));
     }
 
@@ -283,8 +300,51 @@ final class NeonDTOTransformer
         return in_array($id, explode(',', $list)) ? 'Yes' : 'Off';
     }
 
+    /** @param list<string> $arr */
     private static function inArray(string $id, array $arr): string
     {
         return in_array($id, $arr) ? 'Yes' : 'Off';
+    }
+
+    /**
+     * @phpstan-param NeonEnvelope $section
+     *
+     * @phpstan-return NeonRecord
+     */
+    private static function firstRecord(array $section): array
+    {
+        return $section['records'][0] ?? [];
+    }
+
+    /** @phpstan-param NeonRecord $record */
+    private static function value(array $record, string $field): string
+    {
+        $value = $record[$field]['value'] ?? null;
+
+        return is_scalar($value) ? (string) $value : '';
+    }
+
+    /** @phpstan-param NeonRecord $record */
+    private static function nullableValue(array $record, string $field): ?string
+    {
+        $value = $record[$field]['value'] ?? null;
+
+        return is_scalar($value) ? (string) $value : null;
+    }
+
+    /** @phpstan-param NeonRecord $record */
+    private static function displayValue(array $record, string $field): string
+    {
+        $value = $record[$field]['displayValue'] ?? null;
+
+        return is_scalar($value) ? (string) $value : '';
+    }
+
+    /** @phpstan-param NeonRecord $record */
+    private static function nullableDisplayValue(array $record, string $field): ?string
+    {
+        $value = $record[$field]['displayValue'] ?? null;
+
+        return is_scalar($value) ? (string) $value : null;
     }
 }

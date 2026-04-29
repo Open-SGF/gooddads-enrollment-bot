@@ -17,8 +17,10 @@ return new class extends Migration
         }
 
         DB::table('dropbox_tokens')->orderBy('id')->eachById(function (object $row): void {
-            $encryptedAccessToken = $this->encryptIfPlaintext($row->access_token);
-            $encryptedRefreshToken = $this->encryptIfPlaintext($row->refresh_token);
+            $accessToken = is_string($row->access_token) ? $row->access_token : null;
+            $refreshToken = is_string($row->refresh_token) ? $row->refresh_token : null;
+            $encryptedAccessToken = $this->encryptIfPlaintext($accessToken);
+            $encryptedRefreshToken = $this->encryptIfPlaintext($refreshToken);
 
             DB::table('dropbox_tokens')
                 ->where('id', $row->id)
@@ -36,8 +38,10 @@ return new class extends Migration
         }
 
         DB::table('dropbox_tokens')->orderBy('id')->eachById(function (object $row): void {
-            $decryptedAccessToken = $this->decryptIfEncrypted($row->access_token);
-            $decryptedRefreshToken = $this->decryptIfEncrypted($row->refresh_token);
+            $accessToken = is_string($row->access_token) ? $row->access_token : null;
+            $refreshToken = is_string($row->refresh_token) ? $row->refresh_token : null;
+            $decryptedAccessToken = $this->decryptIfEncrypted($accessToken);
+            $decryptedRefreshToken = $this->decryptIfEncrypted($refreshToken);
 
             DB::table('dropbox_tokens')
                 ->where('id', $row->id)
@@ -87,11 +91,7 @@ return new class extends Migration
             }
         }
 
-        if (array_key_exists('tag', $payload) && ! is_string($payload['tag'])) {
-            return false;
-        }
-
-        return true;
+        return ! (array_key_exists('tag', $payload) && ! is_string($payload['tag']));
     }
 
     private function decryptIfEncrypted(?string $value): ?string
