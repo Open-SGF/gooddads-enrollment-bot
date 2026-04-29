@@ -19,6 +19,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'dropbox.basic' => DropboxBasicAuth::class,
         ]);
     })
-    ->withExceptions(function (Exceptions $exceptions) {
+    ->withExceptions(function (Exceptions $exceptions): void {
         Integration::handles($exceptions);
     })->create();

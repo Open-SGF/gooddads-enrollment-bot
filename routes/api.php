@@ -1,7 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 use Illuminate\Support\Facades\Route;
 
-Route::get('/ping', function () {
-    return response()->json(['message' => 'API routes working']);
-});
+Route::get('/ping', fn () => response()->json(['message' => 'API routes working']));

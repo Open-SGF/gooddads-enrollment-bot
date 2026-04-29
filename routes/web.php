@@ -5,12 +5,9 @@ declare(strict_types=1);
 use App\Http\Controllers\DropboxAuthController;
 use Illuminate\Support\Facades\Route;
 
+Route::get('/', fn (): string => 'Web routes working');
 
-Route::get('/', function () {
-    return 'Web routes working';
-});
-
-Route::get('/sentry-test', function () {
+Route::get('/sentry-test', function (): void {
     throw new Exception('Sentry test exception');
 });
 
