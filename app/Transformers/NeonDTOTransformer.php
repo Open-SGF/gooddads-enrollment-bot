@@ -17,14 +17,13 @@ use Illuminate\Support\Facades\Date;
 
 /**
  * @phpstan-import-type NeonEnvelope from NeonApiService
- * @phpstan-import-type NeonParticipantPayload from NeonApiService
  * @phpstan-import-type NeonRecord from NeonApiService
  */
 final class NeonDTOTransformer
 {
     private function __construct() {}
 
-    /** @phpstan-param array<string, NeonEnvelope> $participantData */
+    /** @param array<string, NeonEnvelope> $participantData */
     public static function transformParticipantData(array $participantData): ParticipantUpdateData
     {
         $contactInfo = self::firstRecord($participantData['contactInfo']);
@@ -42,7 +41,7 @@ final class NeonDTOTransformer
         );
     }
 
-    /** @phpstan-param NeonRecord $contactInfo */
+    /** @param NeonRecord $contactInfo */
     private static function transformContactInfo(array $contactInfo): ContactInfoDTO
     {
         return new ContactInfoDTO(
@@ -69,8 +68,7 @@ final class NeonDTOTransformer
     }
 
     /**
-     * @phpstan-param list<NeonRecord> $children
-     *
+     * @param  list<NeonRecord>  $children
      * @return ChildDTO[]
      */
     private static function transformChildren(array $children): array
@@ -94,7 +92,7 @@ final class NeonDTOTransformer
         return $result;
     }
 
-    /** @phpstan-param NeonRecord $d */
+    /** @param NeonRecord $d */
     private static function transformDisclosure(array $d): DisclosureDTO
     {
         $divisions = explode(',', self::value($d, 'division'));
@@ -156,7 +154,7 @@ final class NeonDTOTransformer
         );
     }
 
-    /** @phpstan-param NeonRecord $a */
+    /** @param NeonRecord $a */
     private static function transformAssessment(array $a): AssessmentDTO
     {
         $otherValue = self::nullableDisplayValue($a, 'other');
@@ -183,7 +181,7 @@ final class NeonDTOTransformer
         );
     }
 
-    /** @phpstan-param NeonRecord $s */
+    /** @param NeonRecord $s */
     private static function transformSurvey(array $s): SurveyDTO
     {
         $reasons = explode(',', self::value($s, 'reasons'));
@@ -233,7 +231,7 @@ final class NeonDTOTransformer
         );
     }
 
-    /** @phpstan-param NeonRecord $sp */
+    /** @param NeonRecord $sp */
     private static function transformServicePlan(array $sp): ServicePlanDTO
     {
         return new ServicePlanDTO(
@@ -274,7 +272,7 @@ final class NeonDTOTransformer
         return $date instanceof Carbon ? $date->format('m/d/Y') : '';
     }
 
-    /** @phpstan-param NeonRecord $c */
+    /** @param NeonRecord $c */
     private static function buildAddress(array $c): string
     {
         return mb_trim(implode(' ', array_filter([
@@ -307,16 +305,15 @@ final class NeonDTOTransformer
     }
 
     /**
-     * @phpstan-param NeonEnvelope $section
-     *
-     * @phpstan-return NeonRecord
+     * @param  NeonEnvelope  $section
+     * @return NeonRecord
      */
     private static function firstRecord(array $section): array
     {
         return $section['records'][0] ?? [];
     }
 
-    /** @phpstan-param NeonRecord $record */
+    /** @param NeonRecord $record */
     private static function value(array $record, string $field): string
     {
         $value = $record[$field]['value'] ?? null;
@@ -324,7 +321,7 @@ final class NeonDTOTransformer
         return is_scalar($value) ? (string) $value : '';
     }
 
-    /** @phpstan-param NeonRecord $record */
+    /** @param NeonRecord $record */
     private static function nullableValue(array $record, string $field): ?string
     {
         $value = $record[$field]['value'] ?? null;
@@ -332,7 +329,7 @@ final class NeonDTOTransformer
         return is_scalar($value) ? (string) $value : null;
     }
 
-    /** @phpstan-param NeonRecord $record */
+    /** @param NeonRecord $record */
     private static function displayValue(array $record, string $field): string
     {
         $value = $record[$field]['displayValue'] ?? null;
@@ -340,7 +337,7 @@ final class NeonDTOTransformer
         return is_scalar($value) ? (string) $value : '';
     }
 
-    /** @phpstan-param NeonRecord $record */
+    /** @param NeonRecord $record */
     private static function nullableDisplayValue(array $record, string $field): ?string
     {
         $value = $record[$field]['displayValue'] ?? null;
