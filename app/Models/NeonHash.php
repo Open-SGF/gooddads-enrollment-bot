@@ -4,25 +4,16 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Table;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Override;
 
+#[Fillable(['id'])]
+#[Table(name: 'neon_participant_hashes', keyType: 'string', incrementing: false)]
 final class NeonHash extends Model
 {
     /** @use HasFactory<Factory<static>> */
     use HasFactory;
-
-    #[Override]
-    public $incrementing = false;
-
-    #[Override]
-    protected $keyType = 'string';
-
-    #[Override]
-    protected $table = 'neon_participant_hashes';
-
-    #[Override]
-    protected $fillable = ['id'];
 }
