@@ -56,10 +56,10 @@ final readonly class DropboxAuthController
 
         $payload = $this->dropboxOAuthService->exchangeAuthorizationCode($code);
         $dropboxToken = $this->dropboxOAuthService->storeAuthorizationTokens($payload);
-        $connectedEmail = $this->dropboxOAuthService->fetchAccountEmail($dropboxToken->access_token);
+        $connectedEmail = $this->dropboxOAuthService->fetchAccountEmail($dropboxToken->access_token ?? '');
 
         Log::info('Dropbox OAuth callback completed successfully.', [
-            'account_id' => $dropboxToken->account_id,
+            'account_id' => $dropboxToken->account_id ?? null,
         ]);
 
         return view('dropbox.success', [
