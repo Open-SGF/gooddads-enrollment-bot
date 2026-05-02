@@ -2,6 +2,12 @@
 
 declare(strict_types=1);
 
+use App\Support\IdeHelper\ForceNullablePropertiesHook;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Client\Factory;
+use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Session\Store;
+
 return [
 
     /*
@@ -169,7 +175,7 @@ return [
     */
 
     'model_hooks' => [
-        App\Support\IdeHelper\ForceNullablePropertiesHook::class,
+        ForceNullablePropertiesHook::class,
     ],
 
     /*
@@ -182,8 +188,8 @@ return [
     */
 
     'extra' => [
-        'Eloquent' => ['Illuminate\Database\Eloquent\Builder', 'Illuminate\Database\Query\Builder'],
-        'Session' => ['Illuminate\Session\Store'],
+        'Eloquent' => [Builder::class, Illuminate\Database\Query\Builder::class],
+        'Session' => [Store::class],
     ],
 
     'magic' => [],
@@ -286,7 +292,7 @@ return [
     |
     */
     'macro_default_return_types' => [
-        Illuminate\Http\Client\Factory::class => Illuminate\Http\Client\PendingRequest::class,
+        Factory::class => PendingRequest::class,
     ],
 
     /*

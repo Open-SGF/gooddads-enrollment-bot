@@ -45,7 +45,9 @@
         ],
         "ide-helper": [
             "@php artisan ide-helper:generate --ansi",
-            "@php artisan ide-helper:models -RW --write-eloquent-helper --ansi"
+            "@php artisan ide-helper:models -RW --write-eloquent-helper --ansi",
+            "rector app/Models",
+            "pint app/Models"
         ],
         "test:lint": [
             "pint --test",
