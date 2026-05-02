@@ -10,7 +10,30 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
-/** @property Carbon|null $expires_at */
+/**
+ * @property int|null $id
+ * @property string|null $access_token
+ * @property string|null $refresh_token
+ * @property Carbon|null $expires_at
+ * @property string|null $token_type
+ * @property string|null $scope
+ * @property string|null $account_id
+ * @property Carbon|null $created_at
+ * @property Carbon|null $updated_at
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken query()
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereAccessToken($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereAccountId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereCreatedAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereExpiresAt($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereId($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereRefreshToken($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereScope($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereTokenType($value)
+ * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereUpdatedAt($value)
+ * @mixin \Eloquent
+ */
 #[Fillable([
     'id',
     'access_token',
