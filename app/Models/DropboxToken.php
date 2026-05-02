@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $account_id
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
+ *
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken newModelQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken newQuery()
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken query()
@@ -32,6 +33,7 @@ use Illuminate\Support\Carbon;
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereScope($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereTokenType($value)
  * @method static \Illuminate\Database\Eloquent\Builder<static>|DropboxToken whereUpdatedAt($value)
+ *
  * @mixin \Eloquent
  */
 #[Fillable([
