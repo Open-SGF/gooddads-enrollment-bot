@@ -10,6 +10,7 @@ use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Carbon;
 use Override;
 
 final class PollNeonParticipants extends Command
@@ -20,7 +21,7 @@ final class PollNeonParticipants extends Command
      * @var string
      */
     #[Override]
-    protected $signature = 'neon:poll-participants';
+    protected $signature = 'neon:poll-participants {--date= : Date to process (defaults to today)}';
 
     /**
      * The console command description.
@@ -44,8 +45,18 @@ final class PollNeonParticipants extends Command
     public function handle(): void
     {
 
-        // Returns a map of personId => fullRecord (contactInfo, children, disclosure, assessment, survey, servicePlan)
-        $fullRecords = $this->neonApi->getTodaysParticipantIds();
+        try {
+            $date = $this->option('date') ? $this->parseDate($this->option('date')) : Date::today('America/Chicago');
+        } catch (\InvalidArgumentException $e) {
+            $this->error($e->getMessage());
+            return;
+        }        
+
+        $this->info(sprintf('🔍 Collecting participant records that have been added or updated today - %s....', $date));
+        // $toReturn = $this->getParticipantIdsByDate($todaysDate);
+        $fullRecords = $this->neonApi->getFullParticipantRecordsByDate($date->format('Y-m-d'));
+        $count = count($fullRecords);
+        $this->info(sprintf('📋 Found %d new or updated participant records.', $count));
 
         foreach ($fullRecords as $participantId => $fullRecord) {
             $participantId = (string) $participantId;
@@ -54,8 +65,7 @@ final class PollNeonParticipants extends Command
             $encodedRecord = json_encode($fullRecord);
 
             if ($encodedRecord === false) {
-                Log::warning('⏭️ Participant '.$participantId.' could not be hashed. Skipping pdf regeneration.');
-
+                $this->warning('⏭️ Participant '.$participantId.' could not be hashed. Skipping pdf regeneration.');
                 continue;
             }
 
@@ -63,24 +73,35 @@ final class PollNeonParticipants extends Command
 
             // Check if hash already exists
             if (! NeonHash::query()->where('id', $hash)->exists()) {
-                Log::info('✅ Participant '.$participantId.' has updated data.');
+                $this->info('✅ Participant '.$participantId.' has updated data.');
                 // Store the hash for the participant data for future comparison
-                Log::info('🔄 Generating hash....');
+                $this->info('🔄 Generating hash....');
                 NeonHash::query()->create(['id' => $hash]);
 
-                Log::info('🔄 Transforming participant data to serializable DTO');
+                $this->info('🔄 Transforming participant data to serializable DTO');
                 // Transform the participant data into serializable DTOs
                 $participantData = NeonDTOTransformer::transformParticipantData($fullRecord);
 
                 // Queue the pdf generation job
-                Log::info('📬 Queing pdf regeneration');
+                $this->info('📬 Queing pdf regeneration');
                 dispatch(new GenerateParticipantPdfJob($participantData));
 
             } else {
-                Log::info('⏭️ Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
+                $this->info('⏭️ Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
             }
         }
 
         $this->info('✅ Polling complete.');
+    }
+
+    private function parseDate(string $date): Carbon 
+    {        
+        $parsed = Carbon::createFromFormat('Y-m-d', $date);
+
+        if (!$parsed || $parsed->format('Y-m-d') !== $date) {
+            throw new \InvalidArgumentException("Invalid date format. Expected Y-m-d, e.g. 2026-06-16");
+        }
+
+        return $parsed;
     }
 }
