@@ -9,8 +9,8 @@ use App\Models\NeonHash;
 use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 use Override;
 
 final class PollNeonParticipants extends Command
@@ -47,10 +47,11 @@ final class PollNeonParticipants extends Command
 
         try {
             $date = $this->option('date') ? $this->parseDate($this->option('date')) : Date::today('America/Chicago');
-        } catch (\InvalidArgumentException $e) {
-            $this->error($e->getMessage());
+        } catch (InvalidArgumentException $invalidArgumentException) {
+            $this->error($invalidArgumentException->getMessage());
+
             return;
-        }        
+        }
 
         $this->info(sprintf('🔍 Collecting participant records that have been added or updated today - %s....', $date));
         // $toReturn = $this->getParticipantIdsByDate($todaysDate);
@@ -66,6 +67,7 @@ final class PollNeonParticipants extends Command
 
             if ($encodedRecord === false) {
                 $this->warning('⏭️ Participant '.$participantId.' could not be hashed. Skipping pdf regeneration.');
+
                 continue;
             }
 
@@ -94,13 +96,11 @@ final class PollNeonParticipants extends Command
         $this->info('✅ Polling complete.');
     }
 
-    private function parseDate(string $date): Carbon 
-    {        
-        $parsed = Carbon::createFromFormat('Y-m-d', $date);
+    private function parseDate(string $date): Carbon
+    {
+        $parsed = \Illuminate\Support\Facades\Date::createFromFormat('Y-m-d', $date);
 
-        if (!$parsed || $parsed->format('Y-m-d') !== $date) {
-            throw new \InvalidArgumentException("Invalid date format. Expected Y-m-d, e.g. 2026-06-16");
-        }
+        throw_if(! $parsed || $parsed->format('Y-m-d') !== $date, InvalidArgumentException::class, 'Invalid date format. Expected Y-m-d, e.g. 2026-06-16');
 
         return $parsed;
     }
