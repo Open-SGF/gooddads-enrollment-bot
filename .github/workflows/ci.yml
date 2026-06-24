@@ -90,7 +90,7 @@ jobs:
         run: composer test:types
 
       - name: Create testing database
-        run: php -r "new PDO('mysql:host=127.0.0.1;port=3306', 'root', 'password')->exec('CREATE DATABASE IF NOT EXISTS testing;');"
+        run: php -r "new PDO('mysql:host=127.0.0.1;port=3306', 'root', 'password')->exec('CREATE DATABASE IF NOT EXISTS testing; GRANT ALL PRIVILEGES ON \`testing%\`.* TO \'laravel\'@\'%\'; FLUSH PRIVILEGES;');"
 
       - name: Run test suite
         env:
