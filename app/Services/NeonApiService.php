@@ -5,9 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use Exception;
-use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -37,20 +35,6 @@ final readonly class NeonApiService
 
         $this->baseUrl = is_string($baseUrl) && $baseUrl !== '' ? $baseUrl : null;
         $this->apiKey = is_string($apiKey) && $apiKey !== '' ? $apiKey : null;
-    }
-
-    /** @return array<string, array<string, NeonEnvelope>> */
-    public function getTodaysParticipantIds(): array
-    {
-        $todaysDate = Date::today('America/Chicago')->format('Y-m-d');
-        $todaysDate = '2026-02-24';
-        Log::info(sprintf('🔍 Collecting participant records that have been added or updated today - %s....', $todaysDate));
-        // $toReturn = $this->getParticipantIdsByDate($todaysDate);
-        $toReturn = $this->getFullParticipantRecordsByDate($todaysDate);
-        $count = count($toReturn);
-        Log::info(sprintf('📋 Found %d new or updated participant records.', $count));
-
-        return $toReturn;
     }
 
     /** @return NeonRecord */
