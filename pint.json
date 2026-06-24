@@ -3,7 +3,8 @@
     "notPath": [
         "tests/TestCase.php",
         "tmp",
-        "config/database.php"
+        "config/database.php",
+        "_ide_helper.php"
     ],
     "rules": {
         "array_push": true,

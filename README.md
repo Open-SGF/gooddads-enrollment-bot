@@ -30,6 +30,7 @@
 - Run formatting and lint checks: `composer test:lint`
 - Run static analysis: `composer test:types`
 - Run the test suite: `composer test:unit`
+- Regenerate IDE helper docs: `composer ide-helper`
 - If you are running commands inside Sail, use `sail composer test`, `sail composer test:lint`, `sail composer test:types`, and `sail composer test:unit`
 
 ## Project reset
@@ -40,6 +41,7 @@ If you are stuck or Laravel is stuck.
 - Start the Docker containers: `sail up -d`
 - Wait for the containers to start up. You can check the status of the containers witj `sail ps`
 - Create the database tables: `sail artisan migrate`
+- Regenerate IDE helper docs: `composer ide-helper`
 
 ## Poll Neon
 

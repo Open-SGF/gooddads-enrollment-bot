@@ -13,6 +13,7 @@
         "spatie/laravel-typescript-transformer": "^3.0"
     },
     "require-dev": {
+        "barryvdh/laravel-ide-helper": "^3.7",
         "driftingly/rector-laravel": "^2.0",
         "fakerphp/faker": "^1.23",
         "larastan/larastan": "^3.7",
@@ -41,6 +42,12 @@
         "lint": [
             "rector",
             "pint"
+        ],
+        "ide-helper": [
+            "@php artisan ide-helper:generate --ansi",
+            "@php artisan ide-helper:models -RW --write-eloquent-helper --ansi",
+            "rector app/Models",
+            "pint app/Models"
         ],
         "test:lint": [
             "pint --test",

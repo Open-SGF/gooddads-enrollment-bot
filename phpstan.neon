@@ -15,6 +15,7 @@ parameters:
 
     excludePaths:
         - config/database.php
+        - _ide_helper.php
 
     level: max
 
