@@ -4,26 +4,23 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Override;
 use RuntimeException;
 use Throwable;
 
+#[Description('Re-encrypt Dropbox token values with the current APP_KEY (useful after APP_KEY rotation)')]
+#[Signature('dropbox:rewrap-tokens
+        {--from-key= : Previous APP_KEY (e.g. base64:...) used to decrypt existing token values}
+        {--force : Skip confirmation prompt}')]
 final class RewrapDropboxTokens extends Command
 {
-    #[Override]
-    protected $signature = 'dropbox:rewrap-tokens
-        {--from-key= : Previous APP_KEY (e.g. base64:...) used to decrypt existing token values}
-        {--force : Skip confirmation prompt}';
-
-    #[Override]
-    protected $description = 'Re-encrypt Dropbox token values with the current APP_KEY (useful after APP_KEY rotation)';
-
     public function handle(): int
     {
         $fromKeyOption = $this->option('from-key');

@@ -4,19 +4,16 @@ declare(strict_types=1);
 
 namespace App\Console\Commands;
 
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 use mikehaertl\pdftk\Pdf;
-use Override;
 
+#[Description('Fill all form fields with their field names for debugging layout')]
+#[Signature('pdf:fill-fields')]
 final class PdfFillFields extends Command
 {
-    #[Override]
-    protected $signature = 'pdf:fill-fields';
-
-    #[Override]
-    protected $description = 'Fill all form fields with their field names for debugging layout';
-
     public function handle(): int
     {
         $inputPath = storage_path('pdfs/intake-form/Enrollment_Form_Fillable_2026-01-27.pdf');

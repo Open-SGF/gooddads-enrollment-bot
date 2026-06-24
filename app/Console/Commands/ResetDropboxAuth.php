@@ -5,22 +5,19 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Models\DropboxToken;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Override;
 
+#[Description('Clear stored Dropbox OAuth tokens to force a clean re-authorization flow')]
+#[Signature('dropbox:reset-auth
+        {--with-sessions : Also clear the sessions table}
+        {--force : Skip the confirmation prompt}')]
 final class ResetDropboxAuth extends Command
 {
-    #[Override]
-    protected $signature = 'dropbox:reset-auth
-        {--with-sessions : Also clear the sessions table}
-        {--force : Skip the confirmation prompt}';
-
-    #[Override]
-    protected $description = 'Clear stored Dropbox OAuth tokens to force a clean re-authorization flow';
-
     public function handle(): int
     {
         Log::info('Starting Dropbox auth reset command.', [

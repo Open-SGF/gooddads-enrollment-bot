@@ -5,28 +5,15 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Services\NeonApiService;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use Override;
 use Throwable;
 
+#[Description('Test the buildParticipantRecord() method and output the JSON response')]
+#[Signature('app:test-participant-record {id : The ID of the participant to test}')]
 final class TestParticipantRecord extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    #[Override]
-    protected $signature = 'app:test-participant-record {id : The ID of the participant to test}';
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    #[Override]
-    protected $description = 'Test the buildParticipantRecord() method and output the JSON response';
-
     public function __construct(/**
      * Inject NeonApiService.
      */
