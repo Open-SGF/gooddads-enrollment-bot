@@ -71,6 +71,12 @@ jobs:
           DB_PASSWORD: password
         run: php artisan migrate --no-interaction
 
+      - name: Run formatting and lint checks
+        run: composer test:lint
+
+      - name: Run static analysis
+        run: composer test:types
+
       - name: Check IDE helper files are up to date
         env:
           DB_CONNECTION: mysql
@@ -82,12 +88,6 @@ jobs:
         run: |
           composer ide-helper
           git diff --exit-code --stat || (echo "::error::IDE helper files are stale. Run 'composer ide-helper' locally and commit the changes." && exit 1)
-
-      - name: Run formatting and lint checks
-        run: composer test:lint
-
-      - name: Run static analysis
-        run: composer test:types
 
       - name: Create testing database
         run: php -r "new PDO('mysql:host=127.0.0.1;port=3306', 'root', 'password')->exec('CREATE DATABASE IF NOT EXISTS testing; GRANT ALL PRIVILEGES ON \`testing%\`.* TO \'laravel\'@\'%\'; FLUSH PRIVILEGES;');"
