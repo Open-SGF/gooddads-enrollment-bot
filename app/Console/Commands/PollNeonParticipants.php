@@ -10,6 +10,7 @@ use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Date;
 use InvalidArgumentException;
 use Override;
 
@@ -66,7 +67,7 @@ final class PollNeonParticipants extends Command
             $encodedRecord = json_encode($fullRecord);
 
             if ($encodedRecord === false) {
-                $this->warning('⏭️ Participant '.$participantId.' could not be hashed. Skipping pdf regeneration.');
+                $this->warn('⏭️ Participant '.$participantId.' could not be hashed. Skipping pdf regeneration.');
 
                 continue;
             }
@@ -98,7 +99,7 @@ final class PollNeonParticipants extends Command
 
     private function parseDate(string $date): Carbon
     {
-        $parsed = \Illuminate\Support\Facades\Date::createFromFormat('Y-m-d', $date);
+        $parsed = Date::createFromFormat('Y-m-d', $date);
 
         throw_if(! $parsed || $parsed->format('Y-m-d') !== $date, InvalidArgumentException::class, 'Invalid date format. Expected Y-m-d, e.g. 2026-06-16');
 
