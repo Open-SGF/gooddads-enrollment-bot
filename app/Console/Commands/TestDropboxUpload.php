@@ -6,24 +6,21 @@ namespace App\Console\Commands;
 
 use App\Models\DropboxToken;
 use App\Services\DropboxUploadService;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Override;
 use Throwable;
 
+#[Description('Upload a small probe file to Dropbox and optionally force the token refresh path')]
+#[Signature('dropbox:test-upload
+        {--remote= : Dropbox destination path relative to DROPBOX_UPLOAD_PATH}
+        {--expire-token : Force the stored token to expire before uploading}')]
 final class TestDropboxUpload extends Command
 {
-    #[Override]
-    protected $signature = 'dropbox:test-upload
-        {--remote= : Dropbox destination path relative to DROPBOX_UPLOAD_PATH}
-        {--expire-token : Force the stored token to expire before uploading}';
-
-    #[Override]
-    protected $description = 'Upload a small probe file to Dropbox and optionally force the token refresh path';
-
     public function __construct(
         private readonly DropboxUploadService $dropboxUploadService,
     ) {

@@ -8,30 +8,17 @@ use App\Jobs\GenerateParticipantPdfJob;
 use App\Models\NeonHash;
 use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
+use Illuminate\Console\Attributes\Description;
+use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
 use InvalidArgumentException;
-use Override;
 
+#[Description("Polls Neon for today's participants and queues PDFs for new records")]
+#[Signature('neon:poll-participants {--date= : Date to process (defaults to today)}')]
 final class PollNeonParticipants extends Command
 {
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    #[Override]
-    protected $signature = 'neon:poll-participants {--date= : Date to process (defaults to today)}';
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    #[Override]
-    protected $description = "Polls Neon for today's participants and queues PDFs for new records";
-
     public function __construct(/**
      * Inject NeonApiService.
      */
