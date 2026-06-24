@@ -58,6 +58,9 @@ jobs:
           extensions: sqlite3, pdo_sqlite, pdo_mysql
           cache: composer
 
+      - name: Create .env file for CI
+        run: cp .env.example .env
+
       - name: Install Composer dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
