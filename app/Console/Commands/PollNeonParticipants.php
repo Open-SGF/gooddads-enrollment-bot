@@ -16,7 +16,7 @@ use Illuminate\Support\Facades\Date;
 use InvalidArgumentException;
 
 #[Description("Polls Neon for today's participants and queues PDFs for new records")]
-#[Signature('neon:poll-participants {--date= : Date to process (defaults to today)}')]
+#[Signature('neon:poll-participants {--date= : Date to process Y-m-d (defaults to today)}')]
 final class PollNeonParticipants extends Command
 {
     public function __construct(/**
