@@ -1,34 +1,21 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Console\Commands;
 
+use App\Jobs\GenerateParticipantPdfJob;
+use App\Models\NeonHash;
+use App\Services\NeonApiService;
+use App\Transformers\NeonDTOTransformer;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
-use App\Services\NeonApiService;
-use App\Models\NeonHash;
-use App\Transformers\NeonDTOTransformer;
-use App\Jobs\GenerateParticipantPdfJob;
 
-class GetParticipantRecordById extends Command
+#[Description('Polls Neon for a specified participantid and queues PDF generation')]
+#[Signature('neon:fetch-by-id {id : Participant id to process}')]
+final class GetParticipantRecordById extends Command
 {
-
-    /**
-     * The name and signature of the console command.
-     *
-     * @var string
-     */
-    #[Override]
-    protected $signature = 'neon:fetch-by-id {id : Participant id to process}';
-
-    /**
-     * The console command description.
-     *
-     * @var string
-     */
-    #[Override]
-    protected $description = "Polls Neon for a specified participantid and queues PDF generation";
-
     public function __construct(/**
      * Inject NeonApiService.
      */
@@ -40,28 +27,31 @@ class GetParticipantRecordById extends Command
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(): void
     {
         $id = $this->argument('id');
 
-        if (!is_numeric($id)) {
-            $this->error("Invalid id - '$id' is not a number.");
+        if (! is_numeric($id)) {
+            $this->error(sprintf("Invalid id - '%s' is not a number.", $id));
+
             return;
         }
 
         $this->info(sprintf('🔍 Collecting records for participant id - %s....', $id));
-        // $toReturn = $this->getParticipantIdsByDate($todaysDate);
         $record = $this->neonApi->buildFullParticipantRecord($id);
-        
-        $fullRecord = $this->neonApi->buildFullParticipantRecord($id);
-        
-        if (empty(array_filter($fullRecord))) {
-            $this->error(sprintf("No participant found for id - %s", $id));
+
+        // Extract all 'records' sub-arrays dynamically from the parent array
+        $allExtractedRecords = array_column($record, 'records');
+
+        // Filter out any empty arrays. If the result is empty, ALL records are empty.
+        if (array_filter($allExtractedRecords) === []) {
+            $this->error(sprintf('No participant found for id - %s', $id));
+
             return;
         }
 
         // Create a hash of the full record
-            $encodedRecord = json_encode($fullRecord);
+        $encodedRecord = json_encode($record);
 
         if ($encodedRecord === false) {
             $this->warn('⏭️ Participant '.$id.' could not be hashed. Skipping pdf regeneration.');
@@ -71,7 +61,7 @@ class GetParticipantRecordById extends Command
 
         $hash = hash('sha256', $encodedRecord);
 
-         // Check if hash already exists
+        // Check if hash already exists
         if (! NeonHash::query()->where('id', $hash)->exists()) {
             $this->info('🔄 Generating hash....');
             NeonHash::query()->create(['id' => $hash]);
