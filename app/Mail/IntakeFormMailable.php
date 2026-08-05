@@ -7,7 +7,6 @@ namespace App\Mail;
 use App\DTOs\ParticipantUpdateData;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -20,7 +19,7 @@ final class IntakeFormMailable extends Mailable
     /**
      * Create a new message instance.
      */
-    public function __construct(private readonly ParticipantUpdateData $participant, private readonly string $pdfPath) {}
+    public function __construct(private readonly ParticipantUpdateData $participant) {}
 
     /**
      * Get the message envelope.
@@ -43,17 +42,5 @@ final class IntakeFormMailable extends Mailable
                 'participant' => $this->participant,
             ]
         );
-    }
-
-    /**
-     * Get the attachments for the message.
-     *
-     * @return array<int, Attachment>
-     */
-    public function attachments(): array
-    {
-        return [Attachment::fromStorage($this->pdfPath)
-            ->as('intake-form.pdf')
-            ->withMime('application/pdf')];
     }
 }
