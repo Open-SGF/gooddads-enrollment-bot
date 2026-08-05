@@ -68,7 +68,7 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
 
                     Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
                     Mail::to($recipient)
-                        ->send(new IntakeFormMailable($this->updatedParticipantData, $pdfPath));
+                        ->send(new IntakeFormMailable($this->updatedParticipantData));
                     Log::info('✅ PDF email sent.');
                 }
             }
