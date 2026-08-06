@@ -91,7 +91,7 @@ return new class extends Migration
             }
         }
 
-        return ! (array_key_exists('tag', $payload) && ! is_string($payload['tag']));
+        return ! array_key_exists('tag', $payload) || is_string($payload['tag']);
     }
 
     private function decryptIfEncrypted(?string $value): ?string
