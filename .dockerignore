@@ -1,18 +1,46 @@
-.git
-.idea/
-.vscode/
-.fleet/
-.nova/
-.zed/
+# Version control and CI
+.git/
+.github/
+
+# Local environments and credentials
+.env*
+auth.json
+docker/nginx/certs/
+
+# Dependencies and generated assets
 vendor/
 node_modules/
-.env
-.env.backup
-.env.production
+public/build/
+public/hot
+database/*.sqlite
+coverage/
+
+# Tests and development tooling
+tests/
+docs/
+docker/development/
+docker/nginx/
+docker/README.md
+.claude/
+.fleet/
+.idea/
+.nova/
+.vscode/
+.zed/
 .phpunit.cache/
 .phpunit.result.cache
-/backlog/
-/.claude/
+backlog/
+_ide_helper.php
+compose.yaml
+phpunit.xml
+phpstan.neon
+pint.json
+rector.php
+reset-queue.sh
+setup-dropbox-local-https.sh
+
+# Repository documentation and OS metadata
+*.md
 CLAUDE.md
 .DS_Store
 Thumbs.db

@@ -82,8 +82,6 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN composer require mikehaertl/php-pdftk
-
 RUN setcap "cap_net_bind_service=+ep" /usr/bin/php8.5
 
 RUN userdel -r ubuntu
