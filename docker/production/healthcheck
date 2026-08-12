@@ -1,0 +1,7 @@
+#!/bin/sh
+
+set -eu
+
+[ "$(supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status | grep -c RUNNING)" -eq 4 ]
+
+php8.5 -r 'exit(file_get_contents("http://127.0.0.1:8080/up") === false ? 1 : 0);'
