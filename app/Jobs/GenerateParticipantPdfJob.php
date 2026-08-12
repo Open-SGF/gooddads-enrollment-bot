@@ -17,7 +17,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 
 final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
 {
@@ -45,7 +44,7 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
 
             // Generate the PDF
             Log::info('🔄 Generating PDF.');
-            $pdfPath = $pdfService->generate($this->updatedParticipantData);
+            $pdfGenerationResult = $pdfService->generate($this->updatedParticipantData);
             Log::info('✅ PDF-generation complete');
 
             // Check if the required participant form fields are filled
@@ -58,8 +57,10 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             } else {
 
                 // Upload to Dropbox
+                $dropboxPath = 'participant-forms/'.$this->updatedParticipantData->id.'/'.$pdfGenerationResult->filename;
+
                 try {
-                    $dropboxService->upload(Storage::path($pdfPath), $pdfPath);
+                    $dropboxService->upload($pdfGenerationResult->contents, $dropboxPath);
                     Log::info('✅ Dropbox upload complete.');
                 } catch (Exception $e) {
                     Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
