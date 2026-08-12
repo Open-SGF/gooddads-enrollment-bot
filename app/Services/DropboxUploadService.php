@@ -26,32 +26,24 @@ final readonly class DropboxUploadService
     }
 
     /**
-     * Upload a file to Dropbox.
+     * Upload raw file contents to Dropbox.
      *
-     * @param  string  $localPath  Absolute path to the file on disk
+     * @param  string  $contents raw PDF bytes to upload
      * @param  string  $dropboxPath  Destination path in Dropbox (e.g., "participant-forms/123/file.pdf")
      * @return array{success: bool, data: array<string, mixed>|null, error: ?string}
      *
      * @throws RuntimeException
      */
-    public function upload(string $localPath, string $dropboxPath): array
+    public function upload(string $contents, string $dropboxPath): array
     {
-        if (! file_exists($localPath) || ! is_readable($localPath)) {
-            Log::error('Dropbox upload failed before request: local file missing/unreadable.', [
-                'local_path' => $localPath,
+        if (strlen($contents) === 0) {
+            Log::error('Dropbox upload failed: empty PDF contents.', [
+                'dropbox_path' => $dropboxPath,
             ]);
-            throw new InvalidArgumentException('File not found or not readable: '.$localPath);
+            throw new InvalidArgumentException('Cannot upload empty PDF contents to Dropbox.');
         }
-
+    
         $fullDropboxPath = mb_rtrim($this->uploadPath, '/').'/'.$dropboxPath;
-        $fileContents = file_get_contents($localPath);
-
-        if ($fileContents === false) {
-            Log::error('Dropbox upload failed before request: unable to read local file contents.', [
-                'local_path' => $localPath,
-            ]);
-            throw new RuntimeException('Unable to read local file contents for Dropbox upload.');
-        }
 
         $apiArg = json_encode([
             'path' => $fullDropboxPath,
@@ -68,14 +60,13 @@ final readonly class DropboxUploadService
         }
 
         Log::debug('Dropbox upload starting', [
-            'local_path' => $localPath,
+            'payload_size' => strlen($contents),
             'dropbox_path' => $fullDropboxPath,
-            'file_size' => mb_strlen($fileContents),
         ]);
 
         $accessToken = $this->dropboxOAuthService->getValidAccessToken();
 
-        $result = $this->performUpload($fileContents, $apiArg, $accessToken, $fullDropboxPath);
+        $result = $this->performUpload($contents, $apiArg, $accessToken, $fullDropboxPath);
 
         if ($result['http_code'] === 401) {
             Log::warning('Dropbox access token expired during upload, refreshing and retrying.', [
@@ -83,7 +74,7 @@ final readonly class DropboxUploadService
             ]);
 
             $accessToken = $this->dropboxOAuthService->getValidAccessToken(forceRefresh: true);
-            $result = $this->performUpload($fileContents, $apiArg, $accessToken, $fullDropboxPath);
+            $result = $this->performUpload($contents, $apiArg, $accessToken, $fullDropboxPath);
         }
 
         if ($result['curl_error'] !== null) {
@@ -143,12 +134,12 @@ final readonly class DropboxUploadService
     }
 
     /** @return array{response: string|null, http_code: int, curl_error: string|null} */
-    private function performUpload(string $fileContents, string $apiArg, string $accessToken, string $dropboxPath): array
+    private function performUpload(string $contents, string $apiArg, string $accessToken, string $dropboxPath): array
     {
         Log::debug('Sending Dropbox upload request.', ['dropbox_path' => $dropboxPath]);
 
         if ($this->uploadExecutor instanceof Closure) {
-            return $this->normalizeUploadResult(($this->uploadExecutor)($fileContents, $apiArg, $accessToken, $dropboxPath));
+            return $this->normalizeUploadResult(($this->uploadExecutor)($contents, $apiArg, $accessToken, $dropboxPath));
         }
 
         $ch = curl_init('https://content.dropboxapi.com/2/files/upload');
@@ -159,7 +150,7 @@ final readonly class DropboxUploadService
                 'Dropbox-API-Arg: '.$apiArg,
                 'Content-Type: application/octet-stream',
             ],
-            CURLOPT_POSTFIELDS => $fileContents,
+            CURLOPT_POSTFIELDS => $contents,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_TIMEOUT => 30,
         ]);
