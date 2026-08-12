@@ -22,10 +22,12 @@ RUN apt-get update \
         > /etc/apt/sources.list.d/ppa_ondrej_php.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
+        nginx \
         pdftk \
         php8.5-bcmath \
         php8.5-cli \
         php8.5-curl \
+        php8.5-fpm \
         php8.5-intl \
         php8.5-mbstring \
         php8.5-mysql \
@@ -61,15 +63,21 @@ RUN composer dump-autoload \
 
 FROM runtime AS production
 
+COPY docker/production/healthcheck /usr/local/bin/healthcheck
+COPY docker/production/nginx.conf /etc/nginx/nginx.conf
+COPY docker/production/php-fpm.conf /etc/php/8.5/fpm/php-fpm.conf
 COPY docker/production/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY --from=vendor --chown=www-data:www-data /var/www/html /var/www/html
 
-RUN chmod -R u=rwX,g=rX,o= storage bootstrap/cache \
+RUN chmod +x /usr/local/bin/healthcheck \
+    && chmod -R u=rwX,g=rX,o= storage bootstrap/cache \
     && chmod -R g+w storage bootstrap/cache
 
 USER www-data
 
+EXPOSE 8080
+
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["supervisorctl", "-c", "/etc/supervisor/conf.d/supervisord.conf", "status"]
+    CMD ["healthcheck"]
 
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
