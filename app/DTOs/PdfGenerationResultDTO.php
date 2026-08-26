@@ -1,10 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\DTOs;
 
 use Spatie\LaravelData\Data;
 
-class PdfGenerationResultDTO extends Data
+final class PdfGenerationResultDTO extends Data
 {
     public function __construct(
         public string $filename,

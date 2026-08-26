@@ -42,6 +42,10 @@ return RectorConfig::configure()
     ->withSkip([
         AddOverrideAttributeToOverriddenMethodsRector::class,
         __DIR__.'/config/database.php',
+        // Prevent removal or privatization of methods that implement abstract protected
+        // methods (e.g. DTO::mandatoryFields) which breaks subclass contracts.
+        Rector\DeadCode\Rector\ClassMethod\RemoveUnusedPrivateMethodRector::class,
+        Rector\Privatization\Rector\ClassMethod\PrivatizeFinalClassMethodRector::class,
     ])
     ->withPreparedSets(
         deadCode: true,

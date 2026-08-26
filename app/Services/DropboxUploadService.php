@@ -28,7 +28,7 @@ final readonly class DropboxUploadService
     /**
      * Upload raw file contents to Dropbox.
      *
-     * @param  string  $contents raw PDF bytes to upload
+     * @param  string  $contents  raw PDF bytes to upload
      * @param  string  $dropboxPath  Destination path in Dropbox (e.g., "participant-forms/123/file.pdf")
      * @return array{success: bool, data: array<string, mixed>|null, error: ?string}
      *
@@ -36,13 +36,13 @@ final readonly class DropboxUploadService
      */
     public function upload(string $contents, string $dropboxPath): array
     {
-        if (strlen($contents) === 0) {
+        if ($contents === '') {
             Log::error('Dropbox upload failed: empty PDF contents.', [
                 'dropbox_path' => $dropboxPath,
             ]);
             throw new InvalidArgumentException('Cannot upload empty PDF contents to Dropbox.');
         }
-    
+
         $fullDropboxPath = mb_rtrim($this->uploadPath, '/').'/'.$dropboxPath;
 
         $apiArg = json_encode([
@@ -60,7 +60,7 @@ final readonly class DropboxUploadService
         }
 
         Log::debug('Dropbox upload starting', [
-            'payload_size' => strlen($contents),
+            'payload_size' => mb_strlen($contents),
             'dropbox_path' => $fullDropboxPath,
         ]);
 
