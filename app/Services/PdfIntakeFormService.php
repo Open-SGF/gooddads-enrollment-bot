@@ -35,16 +35,24 @@ final class PdfIntakeFormService
 
         // Read the generated PDF content
         $tmpFile = $pdf->getTmpFile();
-        $contents = file_get_contents($tmpFile->getFileName()); 
+        $contents = file_get_contents($tmpFile->getFileName());
+
+        if ($contents === false) {
+            // Clean up the temporary file before throwing
+            $tmpFile->delete = false; // Prevent temp file from being deleted twice
+            @unlink($tmpFile->getFileName());
+
+            throw new Exception('Failed to read generated PDF file: '.$tmpFile->getFileName());
+        }
 
         // Clean up the temporary file
         $tmpFile->delete = false; // Prevent temp file from being deleted twice
         unlink($tmpFile->getFileName());
 
         return new PdfGenerationResultDTO(
-            filename: (string) $filename,
+            filename: $filename,
             contents: $contents
         );
-        
+
     }
 }

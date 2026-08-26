@@ -39,7 +39,7 @@ final readonly class DropboxUploadService
         $fullDropboxPath = mb_rtrim($this->uploadPath, '/').'/'.$dropboxPath;
 
         Log::debug('Dropbox upload starting.', [
-            'payload_size' => strlen($contents),
+            'payload_size' => mb_strlen($contents, '8bit'),
             'dropbox_path' => $fullDropboxPath,
         ]);
 
