@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM ubuntu:24.04 AS runtime
+FROM ubuntu:26.04 AS runtime
 
 LABEL org.opencontainers.image.authors="Open SGF"
 
