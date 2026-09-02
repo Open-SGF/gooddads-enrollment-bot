@@ -7,15 +7,17 @@ use App\Services\DropboxOAuthService;
 use Illuminate\Encryption\Encrypter;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Route;
+use League\OAuth2\Client\Provider\GenericProvider;
+use League\OAuth2\Client\Token\AccessToken;
+use Spatie\Dropbox\Client;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
-    config()->set('services.dropbox.app_key', 'app-key');
-    config()->set('services.dropbox.app_secret', 'app-secret');
-    config()->set('services.dropbox.redirect_uri', 'http://localhost:8080/dropbox/callback');
+    config()->set('services.dropbox.oauth.clientId', 'app-key');
+    config()->set('services.dropbox.oauth.clientSecret', 'app-secret');
+    config()->set('services.dropbox.oauth.redirectUri', 'http://localhost:8080/dropbox/callback');
     config()->set('services.dropbox.upload_path', '/uploads');
     config()->set('services.dropbox.require_basic_auth', false);
 });
@@ -25,24 +27,35 @@ it('redirects to Dropbox authorization using the callback route', function (): v
 
     $response->assertRedirectContains('https://www.dropbox.com/oauth2/authorize');
     $response->assertRedirectContains('redirect_uri=http%3A%2F%2Flocalhost%3A8080%2Fdropbox%2Fcallback');
+    $response->assertRedirectContains('token_access_type=offline');
 
-    expect(session('dropbox_oauth_state'))->toBeString()->not->toBe('');
+    $provider = resolve(GenericProvider::class);
+
+    expect($response->headers->get('Location'))->not->toContain('approval_prompt')
+        ->and(session('dropbox_oauth_state'))->toBeString()->not->toBe('')
+        ->and($provider->getBaseAccessTokenUrl([]))->toBe('https://api.dropboxapi.com/oauth2/token');
 });
 
 it('stores Dropbox tokens after a successful callback', function (): void {
-    Http::fake([
-        'https://api.dropboxapi.com/oauth2/token' => Http::response([
+    $oauthProvider = Mockery::mock(GenericProvider::class);
+    $oauthProvider->shouldReceive('getAccessToken')
+        ->once()
+        ->with('authorization_code', ['code' => 'test-code'])
+        ->andReturn(new AccessToken([
             'access_token' => 'fresh-access-token',
             'refresh_token' => 'refresh-token',
             'expires_in' => 14400,
             'token_type' => 'bearer',
             'scope' => 'files.content.write account_info.read',
             'account_id' => 'dbid:test-account',
-        ]),
-        'https://api.dropboxapi.com/2/users/get_current_account' => Http::response([
-            'email' => 'josh.campbell@ajillion.com',
-        ]),
-    ]);
+        ]));
+    $this->app->instance(GenericProvider::class, $oauthProvider);
+
+    $dropboxClient = Mockery::mock(Client::class);
+    $dropboxClient->shouldReceive('getAccountInfo')
+        ->once()
+        ->andReturn(['email' => 'josh.campbell@ajillion.com']);
+    $this->app->instance(Client::class, $dropboxClient);
 
     $response = $this
         ->withSession(['dropbox_oauth_state' => 'known-state'])
@@ -65,17 +78,24 @@ it('stores Dropbox tokens after a successful callback', function (): void {
 });
 
 it('shows success page without account metadata when email lookup fails', function (): void {
-    Http::fake([
-        'https://api.dropboxapi.com/oauth2/token' => Http::response([
+    $oauthProvider = Mockery::mock(GenericProvider::class);
+    $oauthProvider->shouldReceive('getAccessToken')
+        ->once()
+        ->andReturn(new AccessToken([
             'access_token' => 'fresh-access-token',
             'refresh_token' => 'refresh-token',
             'expires_in' => 14400,
             'token_type' => 'bearer',
             'scope' => 'files.content.write account_info.read',
             'account_id' => 'dbid:test-account',
-        ]),
-        'https://api.dropboxapi.com/2/users/get_current_account' => Http::response([], 500),
-    ]);
+        ]));
+    $this->app->instance(GenericProvider::class, $oauthProvider);
+
+    $dropboxClient = Mockery::mock(Client::class);
+    $dropboxClient->shouldReceive('getAccountInfo')
+        ->once()
+        ->andThrow(new RuntimeException('Account lookup failed'));
+    $this->app->instance(Client::class, $dropboxClient);
 
     $response = $this
         ->withSession(['dropbox_oauth_state' => 'known-state'])
@@ -131,15 +151,18 @@ it('refreshes an expired Dropbox access token', function (): void {
         'account_id' => 'dbid:test-account',
     ]);
 
-    Http::fake([
-        'https://api.dropboxapi.com/oauth2/token' => Http::response([
+    $oauthProvider = Mockery::mock(GenericProvider::class);
+    $oauthProvider->shouldReceive('getAccessToken')
+        ->once()
+        ->with('refresh_token', ['refresh_token' => 'refresh-token'])
+        ->andReturn(new AccessToken([
             'access_token' => 'refreshed-token',
             'expires_in' => 14400,
             'token_type' => 'bearer',
             'scope' => 'files.content.write',
             'account_id' => 'dbid:test-account',
-        ]),
-    ]);
+        ]));
+    $this->app->instance(GenericProvider::class, $oauthProvider);
 
     $service = resolve(DropboxOAuthService::class);
 
@@ -165,16 +188,19 @@ it('persists rotated Dropbox refresh token when returned by refresh response', f
         'account_id' => 'dbid:test-account',
     ]);
 
-    Http::fake([
-        'https://api.dropboxapi.com/oauth2/token' => Http::response([
+    $oauthProvider = Mockery::mock(GenericProvider::class);
+    $oauthProvider->shouldReceive('getAccessToken')
+        ->once()
+        ->with('refresh_token', ['refresh_token' => 'refresh-token-original'])
+        ->andReturn(new AccessToken([
             'access_token' => 'refreshed-token',
             'refresh_token' => 'refresh-token-rotated',
             'expires_in' => 14400,
             'token_type' => 'bearer',
             'scope' => 'files.content.write',
             'account_id' => 'dbid:test-account',
-        ]),
-    ]);
+        ]));
+    $this->app->instance(GenericProvider::class, $oauthProvider);
 
     $service = resolve(DropboxOAuthService::class);
 
@@ -244,17 +270,18 @@ it('throws an actionable error when stored refresh token cannot be decrypted', f
         ->toThrow(RuntimeException::class, 'Stored Dropbox credentials cannot be decrypted');
 });
 
-it('rejects authorization payload when expires_in is invalid', function (): void {
-    $service = resolve(DropboxOAuthService::class);
+it('rejects authorization tokens without an expiration', function (): void {
+    $oauthProvider = Mockery::mock(GenericProvider::class);
+    $oauthProvider->shouldReceive('getAccessToken')
+        ->once()
+        ->andReturn(new AccessToken([
+            'access_token' => 'fresh-access-token',
+            'refresh_token' => 'refresh-token',
+        ]));
+    $this->app->instance(GenericProvider::class, $oauthProvider);
 
-    expect(fn () => $service->storeAuthorizationTokens([
-        'access_token' => 'fresh-access-token',
-        'refresh_token' => 'refresh-token',
-        'expires_in' => 0,
-        'token_type' => 'bearer',
-        'scope' => 'files.content.write',
-        'account_id' => 'dbid:test-account',
-    ]))->toThrow(RuntimeException::class, 'invalid expires_in');
+    expect(fn () => resolve(DropboxOAuthService::class)->authorize('test-code'))
+        ->toThrow(RuntimeException::class, 'valid expiration');
 });
 
 it('rejects refresh payload when expires_in is invalid', function (): void {
@@ -268,19 +295,21 @@ it('rejects refresh payload when expires_in is invalid', function (): void {
         'account_id' => 'dbid:test-account',
     ]);
 
-    Http::fake([
-        'https://api.dropboxapi.com/oauth2/token' => Http::response([
+    $oauthProvider = Mockery::mock(GenericProvider::class);
+    $oauthProvider->shouldReceive('getAccessToken')
+        ->once()
+        ->andReturn(new AccessToken([
             'access_token' => 'refreshed-token',
             'token_type' => 'bearer',
             'scope' => 'files.content.write',
             'account_id' => 'dbid:test-account',
-        ]),
-    ]);
+        ]));
+    $this->app->instance(GenericProvider::class, $oauthProvider);
 
     $service = resolve(DropboxOAuthService::class);
 
     expect(fn () => $service->getValidAccessToken())
-        ->toThrow(RuntimeException::class, 'invalid expires_in');
+        ->toThrow(RuntimeException::class, 'valid expiration');
 });
 
 it('clears stored Dropbox tokens with the reset command', function (): void {

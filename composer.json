@@ -7,8 +7,10 @@
         "php": "^8.5",
         "laravel/framework": "^13.7",
         "laravel/tinker": "^3.0.2",
+        "league/oauth2-client": "^2.9",
         "mikehaertl/php-pdftk": "*",
         "sentry/sentry-laravel": "^4.25",
+        "spatie/dropbox-api": "^1.25",
         "spatie/laravel-data": "^4.0",
         "spatie/laravel-typescript-transformer": "^3.0"
     },
