@@ -2,19 +2,17 @@
 
 declare(strict_types=1);
 
-use App\Models\DropboxToken;
-use App\Services\DropboxOAuthService;
 use App\Services\DropboxUploadService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Spatie\Dropbox\Client;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function (): void {
-    config()->set('services.dropbox.app_key', 'app-key');
-    config()->set('services.dropbox.app_secret', 'app-secret');
-    config()->set('services.dropbox.redirect_uri', 'http://localhost:8080/dropbox/callback');
+    config()->set('services.dropbox.oauth.clientId', 'app-key');
+    config()->set('services.dropbox.oauth.clientSecret', 'app-secret');
+    config()->set('services.dropbox.oauth.redirectUri', 'http://localhost:8080/dropbox/callback');
     config()->set('services.dropbox.upload_path', '/uploads');
 });
 
@@ -25,97 +23,56 @@ it('fails when forcing token expiration without a stored Dropbox token', functio
 });
 
 it('rejects upload requests for missing local files before calling Dropbox', function (): void {
-    $service = resolve(DropboxUploadService::class);
+    $client = Mockery::mock(Client::class);
+    $client->shouldNotReceive('upload');
 
-    expect(fn () => $service->upload('/tmp/does-not-exist-dropbox-test.pdf', 'dropbox-test/missing-file.pdf'))
+    $service = new DropboxUploadService($client);
+
+    expect(fn (): array => $service->upload('/tmp/does-not-exist-dropbox-test.pdf', 'dropbox-test/missing-file.pdf'))
         ->toThrow(InvalidArgumentException::class, 'File not found or not readable');
 });
 
-it('retries upload after a 401 by forcing token refresh', function (): void {
-    DropboxToken::query()->create([
-        'id' => 1,
-        'access_token' => 'current-access-token',
-        'refresh_token' => 'refresh-token',
-        'expires_at' => now()->addHour(),
-        'token_type' => 'bearer',
-        'scope' => 'files.content.write',
-        'account_id' => 'dbid:test-account',
-    ]);
+it('uploads through the Dropbox client with atomic autorename enabled', function (): void {
+    Storage::put('dropbox-test/upload-probe.txt', 'probe content');
+    $absoluteLocalPath = Storage::path('dropbox-test/upload-probe.txt');
 
-    Http::fake([
-        'https://api.dropboxapi.com/oauth2/token' => Http::response([
-            'access_token' => 'refreshed-access-token',
-            'refresh_token' => 'rotated-refresh-token',
-            'expires_in' => 14400,
-            'token_type' => 'bearer',
-            'scope' => 'files.content.write',
-            'account_id' => 'dbid:test-account',
-        ]),
-    ]);
+    $client = Mockery::mock(Client::class);
+    $client->shouldReceive('upload')
+        ->once()
+        ->withArgs(fn (string $path, mixed $contents, string $mode, bool $autorename): bool => $path === '/uploads/dropbox-test/upload-probe.txt'
+            && is_resource($contents)
+            && stream_get_contents($contents) === 'probe content'
+            && $mode === 'add'
+            && $autorename)
+        ->andReturn([
+            'id' => 'id:dropbox-file-id',
+            'path_display' => '/uploads/dropbox-test/upload-probe (1).txt',
+            'size' => 13,
+        ]);
 
-    Storage::put('dropbox-test/upload-retry-probe.txt', 'retry probe content');
-    $absoluteLocalPath = Storage::path('dropbox-test/upload-retry-probe.txt');
+    $service = new DropboxUploadService($client);
+    $metadata = $service->upload($absoluteLocalPath, 'dropbox-test/upload-probe.txt');
 
-    $uploadCalls = 0;
+    expect($metadata)
+        ->toHaveKey('id', 'id:dropbox-file-id')
+        ->toHaveKey('path_display', '/uploads/dropbox-test/upload-probe (1).txt');
 
-    $service = new DropboxUploadService(
-        resolve(DropboxOAuthService::class),
-        function (string $fileContents, string $apiArg, string $accessToken, string $dropboxPath) use (&$uploadCalls): array {
-            $uploadCalls++;
-
-            if ($uploadCalls === 1) {
-                return [
-                    'response' => json_encode(['error_summary' => 'expired_access_token']),
-                    'http_code' => 401,
-                    'curl_error' => null,
-                ];
-            }
-
-            return [
-                'response' => json_encode([
-                    'id' => 'id:dropbox-file-id',
-                    'path_display' => '/uploads/dropbox-test/upload-retry-probe.txt',
-                    'size' => 20,
-                ]),
-                'http_code' => 200,
-                'curl_error' => null,
-            ];
-        },
-    );
-
-    $result = $service->upload($absoluteLocalPath, 'dropbox-test/upload-retry-probe.txt');
-
-    expect($result['success'])->toBeTrue();
-    expect($uploadCalls)->toBe(2);
-
-    Storage::delete('dropbox-test/upload-retry-probe.txt');
+    Storage::delete('dropbox-test/upload-probe.txt');
 });
 
-it('throws a runtime exception when Dropbox upload API returns an error status', function (): void {
-    DropboxToken::query()->create([
-        'id' => 1,
-        'access_token' => 'current-access-token',
-        'refresh_token' => 'refresh-token',
-        'expires_at' => now()->addHour(),
-        'token_type' => 'bearer',
-        'scope' => 'files.content.write',
-        'account_id' => 'dbid:test-account',
-    ]);
-
+it('propagates errors from the Dropbox client', function (): void {
     Storage::put('dropbox-test/upload-fail-probe.txt', 'failure probe content');
     $absoluteLocalPath = Storage::path('dropbox-test/upload-fail-probe.txt');
 
-    $service = new DropboxUploadService(
-        resolve(DropboxOAuthService::class),
-        fn (string $fileContents, string $apiArg, string $accessToken, string $dropboxPath): array => [
-            'response' => json_encode(['error_summary' => 'too_many_write_operations']),
-            'http_code' => 429,
-            'curl_error' => null,
-        ],
-    );
+    $client = Mockery::mock(Client::class);
+    $client->shouldReceive('upload')
+        ->once()
+        ->andThrow(new RuntimeException('Dropbox API request failed'));
+
+    $service = new DropboxUploadService($client);
 
     expect(fn (): array => $service->upload($absoluteLocalPath, 'dropbox-test/upload-fail-probe.txt'))
-        ->toThrow(RuntimeException::class, 'Dropbox upload failed (429): too_many_write_operations');
+        ->toThrow(RuntimeException::class, 'Dropbox API request failed');
 
     Storage::delete('dropbox-test/upload-fail-probe.txt');
 });

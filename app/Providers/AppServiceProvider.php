@@ -4,7 +4,12 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Services\DropboxTokenProvider;
+use GuzzleHttp\Client as GuzzleClient;
+use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
+use League\OAuth2\Client\Provider\GenericProvider;
+use Spatie\Dropbox\Client;
 
 final class AppServiceProvider extends ServiceProvider
 {
@@ -13,22 +18,13 @@ final class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
-    }
+        $this->app->bind(fn (): GenericProvider => new GenericProvider(
+            config()->array('services.dropbox.oauth'),
+            ['httpClient' => new GuzzleClient(['timeout' => 30])],
+        ));
 
-    /**
-     * Bootstrap any application services.
-     */
-    public function boot(): void
-    {
-        $this->configureRateLimiting();
-    }
-
-    /**
-     * Configure the rate limiters for the application.
-     */
-    private function configureRateLimiting(): void
-    {
-        //
+        $this->app->singleton(
+            fn (Application $application): Client => new Client($application->make(DropboxTokenProvider::class)),
+        );
     }
 }

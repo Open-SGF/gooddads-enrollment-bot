@@ -73,9 +73,8 @@ final class TestDropboxUpload extends Command
 
             $absoluteLocalPath = Storage::path($localRelativePath);
 
-            $result = $this->dropboxUploadService->upload($absoluteLocalPath, $remotePath);
-            $resultData = is_array($result['data']) ? $result['data'] : [];
-            $uploadedPath = is_string($resultData['path_display'] ?? null) ? $resultData['path_display'] : $remotePath;
+            $metadata = $this->dropboxUploadService->upload($absoluteLocalPath, $remotePath);
+            $uploadedPath = is_string($metadata['path_display'] ?? null) ? $metadata['path_display'] : $remotePath;
 
             $this->info('Dropbox upload succeeded.');
             $this->line('Local file: '.$absoluteLocalPath);

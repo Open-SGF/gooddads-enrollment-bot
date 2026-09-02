@@ -26,9 +26,14 @@ return [
     ],
 
     'dropbox' => [
-        'app_key' => env('DROPBOX_APP_KEY'),
-        'app_secret' => env('DROPBOX_APP_SECRET'),
-        'redirect_uri' => env('DROPBOX_REDIRECT_URI'),
+        'oauth' => [
+            'clientId' => env('DROPBOX_APP_KEY', ''),
+            'clientSecret' => env('DROPBOX_APP_SECRET', ''),
+            'redirectUri' => env('DROPBOX_REDIRECT_URI', ''),
+            'urlAuthorize' => 'https://www.dropbox.com/oauth2/authorize',
+            'urlAccessToken' => 'https://api.dropboxapi.com/oauth2/token',
+            'urlResourceOwnerDetails' => 'https://api.dropboxapi.com/2/users/get_current_account',
+        ],
         'upload_path' => env('DROPBOX_UPLOAD_PATH', '/uploads'),
         'require_basic_auth' => env('DROPBOX_OAUTH_REQUIRE_BASIC_AUTH', true),
         'basic_auth_user' => env('DROPBOX_OAUTH_BASIC_USER'),
