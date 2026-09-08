@@ -24,6 +24,12 @@
 - Create the database tables: `sail artisan migrate`
 - Authorize Dropbox uploads by visiting `http://localhost:8080/dropbox/authorize` from the same machine, or your NAS HTTPS hostname for LAN use. `DROPBOX_AUTH_PORT` is published by Docker and reachable on your LAN unless your host firewall/network policy restricts it. Set the Dropbox app callback to the exact URI in `DROPBOX_REDIRECT_URI` and use `https` for any non-local callback.
 
+## Completed form email
+
+Set `MAIL_INTAKE_FORM_RECIPIENT` in `.env` or the deployment environment to the mailbox that should receive completed intake forms. This is separate from `MAIL_FROM_ADDRESS`, which controls the sender. Configure the `MAIL_MAILER` and transport settings for delivery.
+
+There is no default recipient. Missing or invalid addresses cause the email send to fail and the PDF job to retry, rather than send participant data to a fallback address. After changing the recipient, rebuild any cached configuration with `php artisan config:cache` and restart queue workers with `php artisan queue:restart`, or redeploy the container.
+
 ## Testing and Linting
 
 - Run all checks: `composer test`

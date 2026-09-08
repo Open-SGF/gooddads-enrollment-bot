@@ -18,6 +18,9 @@ return [
 
     'default' => env('MAIL_MAILER', 'log'),
 
+    // Destination for completed intake forms. No fallback recipient is used.
+    'intake_form_recipient' => env('MAIL_INTAKE_FORM_RECIPIENT'),
+
     /*
     |--------------------------------------------------------------------------
     | Mailer Configurations
