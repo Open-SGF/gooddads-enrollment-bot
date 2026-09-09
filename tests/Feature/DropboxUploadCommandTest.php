@@ -44,11 +44,15 @@ it('uploads through the Dropbox client with atomic autorename enabled', function
             && stream_get_contents($contents) === 'probe content'
             && $mode === 'add'
             && $autorename)
-        ->andReturn([
-            'id' => 'id:dropbox-file-id',
-            'path_display' => '/uploads/dropbox-test/upload-probe (1).txt',
-            'size' => 13,
-        ]);
+        ->andReturnUsing(function (string $path, mixed $contents): array {
+            fclose($contents);
+
+            return [
+                'id' => 'id:dropbox-file-id',
+                'path_display' => '/uploads/dropbox-test/upload-probe (1).txt',
+                'size' => 13,
+            ];
+        });
 
     $service = new DropboxUploadService($client);
     $metadata = $service->upload($absoluteLocalPath, 'dropbox-test/upload-probe.txt');
@@ -67,7 +71,11 @@ it('propagates errors from the Dropbox client', function (): void {
     $client = Mockery::mock(Client::class);
     $client->shouldReceive('upload')
         ->once()
-        ->andThrow(new RuntimeException('Dropbox API request failed'));
+        ->andReturnUsing(function (string $path, mixed $contents): never {
+            fclose($contents);
+
+            throw new RuntimeException('Dropbox API request failed');
+        });
 
     $service = new DropboxUploadService($client);
 
