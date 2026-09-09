@@ -92,6 +92,17 @@ If you need to re-authorize (e.g. to rotate tokens or after revoking access in D
 
 If you log out of Dropbox first and then start a new flow, the Dropbox login page may appear to hang (spinner animation) after you submit your credentials. This is a known Dropbox SPA behavior: after a successful login, its client-side code tries to restore a cached "entry page" from a prior OAuth session and gets stuck when that cached URL is stale. **Simply refresh the page** — since you are now logged in, Dropbox will re-evaluate the OAuth URL and proceed directly to the consent screen. This only affects re-authorization in the same browser session; it does not affect end-user flows.
 
+### Production image logging
+
+Set the container environment variable `LOG_FORMAT` to `text` or `json`. The default is `text`; unsupported values stop startup.
+
+- `text` uses Laravel's default stderr formatter, plain-text queue status output, and Nginx's combined access log format.
+- `json` uses Monolog's JSON formatter, `queue:work --json`, and JSON Nginx access logs.
+
+The entrypoint defaults `LOG_CHANNEL` to `stderr` unless explicitly set. The formatter selection applies to that channel and overrides `LOG_STDERR_FORMATTER`. In Kubernetes, set `LOG_FORMAT: json` rather than setting the formatter directly. Restart the container to change formats.
+
+Scheduler, migration, Supervisor, PHP-FPM, and Nginx error output keep their existing formats. JSON mode does not convert those messages.
+
 ### Poll Neon
 
 - Participant polling runs every minute while the Laravel scheduler is running. The production Docker image starts the scheduler automatically.
