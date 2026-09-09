@@ -63,6 +63,7 @@ RUN composer dump-autoload \
 
 FROM runtime AS production
 
+COPY --chmod=755 docker/production/entrypoint /usr/local/bin/entrypoint
 COPY docker/production/healthcheck /usr/local/bin/healthcheck
 COPY docker/production/nginx.conf /etc/nginx/nginx.conf
 COPY docker/production/php-fpm.conf /etc/php/8.5/fpm/php-fpm.conf
@@ -80,4 +81,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
     CMD ["healthcheck"]
 
+ENTRYPOINT ["/usr/local/bin/entrypoint"]
 CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
