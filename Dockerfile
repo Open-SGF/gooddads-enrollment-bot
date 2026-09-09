@@ -66,6 +66,7 @@ FROM runtime AS production
 COPY --chmod=755 docker/production/entrypoint /usr/local/bin/entrypoint
 COPY docker/production/healthcheck /usr/local/bin/healthcheck
 COPY docker/production/nginx.conf /etc/nginx/nginx.conf
+COPY docker/production/logging/ /etc/nginx/logging/
 COPY docker/production/php-fpm.conf /etc/php/8.5/fpm/php-fpm.conf
 COPY docker/production/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY --from=vendor --chown=www-data:www-data /var/www/html /var/www/html

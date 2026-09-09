@@ -92,6 +92,10 @@ If you need to re-authorize (e.g. to rotate tokens or after revoking access in D
 
 If you log out of Dropbox first and then start a new flow, the Dropbox login page may appear to hang (spinner animation) after you submit your credentials. This is a known Dropbox SPA behavior: after a successful login, its client-side code tries to restore a cached "entry page" from a prior OAuth session and gets stuck when that cached URL is stale. **Simply refresh the page** — since you are now logged in, Dropbox will re-evaluate the OAuth URL and proceed directly to the consent screen. This only affects re-authorization in the same browser session; it does not affect end-user flows.
 
+### Production image logging
+
+Set `LOG_FORMAT=json` for JSON Laravel stderr, queue, and Nginx access logs, or `text` for plain text. Defaults to `text`; other logs are unchanged.
+
 ### Poll Neon
 
 - Participant polling runs every minute while the Laravel scheduler is running. The production Docker image starts the scheduler automatically.

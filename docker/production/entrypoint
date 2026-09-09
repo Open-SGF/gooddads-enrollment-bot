@@ -1,6 +1,26 @@
 #!/bin/sh
 set -e
 
+LOG_FORMAT="${LOG_FORMAT:-text}"
+export LOG_CHANNEL="${LOG_CHANNEL:-stderr}"
+export QUEUE_LOG_FLAGS=""
+
+case "$LOG_FORMAT" in
+    text)
+        unset LOG_STDERR_FORMATTER
+        ;;
+    json)
+        export LOG_STDERR_FORMATTER='Monolog\Formatter\JsonFormatter'
+        export QUEUE_LOG_FLAGS="--json"
+        ;;
+    *)
+        printf 'Invalid LOG_FORMAT: %s. Expected text or json.\n' "$LOG_FORMAT" >&2
+        exit 1
+        ;;
+esac
+
+cp "/etc/nginx/logging/$LOG_FORMAT.conf" /tmp/nginx-logging.conf
+
 php8.5 artisan migrate --force --no-interaction
 
 exec "$@"
