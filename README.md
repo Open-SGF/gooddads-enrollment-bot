@@ -90,4 +90,7 @@ If you log out of Dropbox first and then start a new flow, the Dropbox login pag
 
 ### Poll Neon
 
+- Participant polling runs every minute while the Laravel scheduler is running. The production Docker image starts the scheduler automatically.
+- Start the scheduler locally: `sail artisan schedule:work`.
+- Check the configured schedule: `sail artisan schedule:list`.
 - Poll neon with high verbosity (-vvv): `sail artisan neon:poll-participants -vvv`
