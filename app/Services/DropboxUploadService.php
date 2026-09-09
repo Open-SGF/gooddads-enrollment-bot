@@ -52,7 +52,9 @@ final readonly class DropboxUploadService
                 autorename: true,
             );
         } finally {
-            fclose($file);
+            if (is_resource($file)) {
+                fclose($file);
+            }
         }
 
         Log::info('Dropbox upload succeeded.', [
