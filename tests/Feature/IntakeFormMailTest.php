@@ -11,7 +11,6 @@ use App\DTOs\SurveyDTO;
 use App\Mail\IntakeFormMailable;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
 use Symfony\Component\Mime\Address;
 
 beforeEach(function (): void {
@@ -48,36 +47,15 @@ beforeEach(function (): void {
     $this->mailable = new IntakeFormMailable($participant, 'participant-forms/123/intake.pdf');
 });
 
-it('sends the form and PDF attachment to the configured recipients', function (array $recipients): void {
-    config()->set('mail.intake_form_recipients', $recipients);
-
-    $sent = Mail::send($this->mailable);
+it('sends the form and PDF attachment to the given recipient', function (string $recipient): void {
+    $sent = Mail::to($recipient)->send($this->mailable);
     $message = $sent->getOriginalMessage();
 
-    expect(array_map(fn (Address $address): string => $address->getAddress(), $message->getTo()))->toBe($recipients)
+    expect(array_map(fn (Address $address): string => $address->getAddress(), $message->getTo()))->toBe([$recipient])
         ->and($message->getFrom()[0]->getAddress())->toBe('sender@example.org')
         ->and($message->getSubject())->toBe('Intake Form for Test Participant')
         ->and($message->getHtmlBody())->toContain('Test Participant')
         ->and($message->getAttachments())->toHaveCount(1)
         ->and($message->getAttachments()[0]->getFilename())->toBe('intake-form.pdf')
         ->and($message->getAttachments()[0]->getBody())->toBe('%PDF-1.4 test attachment');
-})->with([
-    'one recipient' => [['intake@example.org']],
-    'multiple recipients' => [['intake@example.org', 'enrollment@example.net']],
-]);
-
-it('rejects invalid recipients without sending a form', function (array $recipients): void {
-    config()->set('mail.intake_form_recipients', $recipients);
-
-    expect(fn () => Mail::send($this->mailable))
-        ->toThrow(ValidationException::class);
-
-    expect(Mail::getSymfonyTransport()->messages())->toBeEmpty();
-})->with([
-    'invalid address' => [['not-an-email']],
-    'mixed valid and invalid addresses' => [['intake@example.org', 'not-an-email']],
-    'non-string' => [[false]],
-    'empty address' => [['']],
-    'null address' => [[null]],
-    'zero string' => [['0']],
-]);
+})->with(['intake@example.org', 'enrollment@example.net']);

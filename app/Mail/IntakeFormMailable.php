@@ -11,7 +11,6 @@ use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Validator;
 
 final class IntakeFormMailable extends Mailable
 {
@@ -28,19 +27,7 @@ final class IntakeFormMailable extends Mailable
      */
     public function envelope(): Envelope
     {
-        $recipients = config()->array('mail.intake_form_recipients');
-
-        /** @var array{recipients: array<int, string>} $validated */
-        $validated = Validator::make(
-            ['recipients' => $recipients],
-            [
-                'recipients' => ['array'],
-                'recipients.*' => ['required', 'string', 'email'],
-            ],
-        )->validate();
-
         return new Envelope(
-            to: $validated['recipients'],
             subject: 'Intake Form for '.$this->participant->fullName()
         );
     }
