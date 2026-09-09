@@ -11,6 +11,7 @@ use App\DTOs\SurveyDTO;
 use App\Mail\IntakeFormMailable;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Symfony\Component\Mime\Address;
 
 beforeEach(function (): void {
     config()->set('mail.default', 'array');
@@ -46,34 +47,33 @@ beforeEach(function (): void {
     $this->mailable = new IntakeFormMailable($participant, 'participant-forms/123/intake.pdf');
 });
 
-it('sends the form and PDF attachment to the configured recipient', function (string $recipient): void {
-    config()->set('mail.intake_form_recipient', $recipient);
+it('sends the form and PDF attachment to the configured recipients', function (array $recipients): void {
+    config()->set('mail.intake_form_recipients', $recipients);
 
     $sent = Mail::send($this->mailable);
     $message = $sent->getOriginalMessage();
 
-    expect($message->getTo())->toHaveCount(1)
-        ->and($message->getTo()[0]->getAddress())->toBe($recipient)
+    expect(array_map(fn (Address $address): string => $address->getAddress(), $message->getTo()))->toBe($recipients)
         ->and($message->getFrom()[0]->getAddress())->toBe('sender@example.org')
         ->and($message->getSubject())->toBe('Intake Form for Test Participant')
         ->and($message->getHtmlBody())->toContain('Test Participant')
         ->and($message->getAttachments())->toHaveCount(1)
         ->and($message->getAttachments()[0]->getFilename())->toBe('intake-form.pdf')
         ->and($message->getAttachments()[0]->getBody())->toBe('%PDF-1.4 test attachment');
-})->with(['intake@example.org', 'enrollment@example.net']);
+})->with([
+    'one recipient' => [['intake@example.org']],
+    'multiple recipients' => [['intake@example.org', 'enrollment@example.net']],
+]);
 
-it('rejects missing or invalid recipients without sending a form', function (mixed $recipient): void {
-    config()->set('mail.intake_form_recipient', $recipient);
+it('rejects invalid recipients without sending a form', function (array $recipients): void {
+    config()->set('mail.intake_form_recipients', $recipients);
 
     expect(fn () => Mail::send($this->mailable))
-        ->toThrow(RuntimeException::class, 'MAIL_INTAKE_FORM_RECIPIENT must be configured with a valid email address.');
+        ->toThrow(RuntimeException::class, 'MAIL_INTAKE_FORM_RECIPIENTS must contain valid email addresses.');
 
     expect(Mail::getSymfonyTransport()->messages())->toBeEmpty();
 })->with([
-    'unset' => [null],
-    'empty' => [''],
-    'whitespace' => ['   '],
-    'invalid address' => ['not-an-email'],
-    'multiple addresses' => ['one@example.org,two@example.org'],
-    'non-string' => [false],
+    'invalid address' => [['not-an-email']],
+    'mixed valid and invalid addresses' => [['intake@example.org', 'not-an-email']],
+    'non-string' => [[false]],
 ]);

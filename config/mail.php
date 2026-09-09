@@ -18,8 +18,11 @@ return [
 
     'default' => env('MAIL_MAILER', 'log'),
 
-    // Destination for completed intake forms. No fallback recipient is used.
-    'intake_form_recipient' => env('MAIL_INTAKE_FORM_RECIPIENT'),
+    // Optional destinations for completed intake forms. An empty list disables email.
+    'intake_form_recipients' => array_values(array_filter(
+        array_map(trim(...), explode(',', (string) env('MAIL_INTAKE_FORM_RECIPIENTS', ''))),
+        fn (string $address): bool => $address !== '',
+    )),
 
     /*
     |--------------------------------------------------------------------------

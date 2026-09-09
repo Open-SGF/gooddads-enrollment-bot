@@ -29,16 +29,21 @@ final class IntakeFormMailable extends Mailable
      */
     public function envelope(): Envelope
     {
-        $recipient = config('mail.intake_form_recipient');
+        $recipients = config()->array('mail.intake_form_recipients');
+        $addresses = [];
 
-        throw_if(
-            ! is_string($recipient) || filter_var($recipient, FILTER_VALIDATE_EMAIL) === false,
-            RuntimeException::class,
-            'MAIL_INTAKE_FORM_RECIPIENT must be configured with a valid email address.'
-        );
+        foreach ($recipients as $recipient) {
+            throw_if(
+                ! is_string($recipient) || filter_var($recipient, FILTER_VALIDATE_EMAIL) === false,
+                RuntimeException::class,
+                'MAIL_INTAKE_FORM_RECIPIENTS must contain valid email addresses.'
+            );
+
+            $addresses[] = new Address($recipient);
+        }
 
         return new Envelope(
-            to: [new Address($recipient)],
+            to: $addresses,
             subject: 'Intake Form for '.$this->participant->fullName()
         );
     }

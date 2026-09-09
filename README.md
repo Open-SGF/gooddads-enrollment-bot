@@ -26,9 +26,11 @@
 
 ## Completed form email
 
-Set `MAIL_INTAKE_FORM_RECIPIENT` in `.env` or the deployment environment to the mailbox that should receive completed intake forms. This is separate from `MAIL_FROM_ADDRESS`, which controls the sender. Configure the `MAIL_MAILER` and transport settings for delivery.
+Set `MAIL_INTAKE_FORM_RECIPIENTS` to a comma-separated list of mailboxes, such as `intake@example.org,enrollment@example.org`. Laravel loads this as the `mail.intake_form_recipients` array, trimming whitespace and removing empty entries. `MAIL_FROM_ADDRESS` controls the sender. Configure `MAIL_MAILER` and its transport settings for delivery.
 
-There is no default recipient. Missing or invalid addresses cause the email send to fail and the PDF job to retry, rather than send participant data to a fallback address. After changing the recipient, rebuild any cached configuration with `php artisan config:cache` and restart queue workers with `php artisan queue:restart`, or redeploy the container.
+Leave `MAIL_INTAKE_FORM_RECIPIENTS` unset or empty to skip email. PDF generation and Dropbox upload still run. Invalid non-empty addresses cause email delivery to fail rather than send to only part of the list.
+
+After changing recipients, rebuild any cached configuration with `php artisan config:cache` and restart queue workers with `php artisan queue:restart`, or redeploy the container.
 
 ## Testing and Linting
 
