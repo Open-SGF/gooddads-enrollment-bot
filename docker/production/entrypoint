@@ -1,0 +1,6 @@
+#!/bin/sh
+set -e
+
+php8.5 artisan migrate --force --no-interaction
+
+exec "$@"
