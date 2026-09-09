@@ -59,11 +59,18 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
                     Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
                 }
 
-                // Send email
-                Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
-                Mail::to('hello@example.com')
-                    ->send(new IntakeFormMailable($this->updatedParticipantData, $pdfPath));
-                Log::info('✅ PDF email sent.');
+                foreach (config()->array('mail.intake_form_recipients') as $recipient) {
+                    if (validator(['email' => $recipient], ['email' => 'required|string|email'])->fails()) {
+                        Log::warning('Skipping PDF email for invalid recipient.', ['recipient' => $recipient]);
+
+                        continue;
+                    }
+
+                    Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
+                    Mail::to($recipient)
+                        ->send(new IntakeFormMailable($this->updatedParticipantData, $pdfPath));
+                    Log::info('✅ PDF email sent.');
+                }
             }
 
         } catch (Exception $exception) {
