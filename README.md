@@ -94,14 +94,7 @@ If you log out of Dropbox first and then start a new flow, the Dropbox login pag
 
 ### Production image logging
 
-Set the container environment variable `LOG_FORMAT` to `text` or `json`. The default is `text`; unsupported values stop startup.
-
-- `text` uses Laravel's default stderr formatter, plain-text queue status output, and Nginx's combined access log format.
-- `json` uses Monolog's JSON formatter, `queue:work --json`, and JSON Nginx access logs.
-
-The entrypoint defaults `LOG_CHANNEL` to `stderr` unless explicitly set. The formatter selection applies to that channel and overrides `LOG_STDERR_FORMATTER`. In Kubernetes, set `LOG_FORMAT: json` rather than setting the formatter directly. Restart the container to change formats.
-
-Scheduler, migration, Supervisor, PHP-FPM, and Nginx error output keep their existing formats. JSON mode does not convert those messages.
+Set `LOG_FORMAT=json` for JSON Laravel stderr, queue, and Nginx access logs, or `text` for plain text. Defaults to `text`; other logs are unchanged.
 
 ### Poll Neon
 
