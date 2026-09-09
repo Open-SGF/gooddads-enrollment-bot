@@ -22,6 +22,8 @@ return [
 
     'default' => env('LOG_CHANNEL', 'stack'),
 
+    'scheduler_output' => env('SCHEDULER_LOG_OUTPUT', '/dev/null'),
+
     /*
     |--------------------------------------------------------------------------
     | Deprecations Log Channel

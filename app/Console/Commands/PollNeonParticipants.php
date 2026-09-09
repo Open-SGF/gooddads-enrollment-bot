@@ -13,6 +13,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
 #[Description("Polls Neon for today's participants and queues PDFs for new records")]
@@ -32,6 +33,7 @@ final class PollNeonParticipants extends Command
      */
     public function handle(): void
     {
+        Log::info('Starting Neon participant poll.');
 
         try {
             $date = $this->option('date') ? $this->parseDate($this->option('date')) : Date::today('America/Chicago');

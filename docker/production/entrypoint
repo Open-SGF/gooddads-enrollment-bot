@@ -3,7 +3,9 @@ set -e
 
 LOG_FORMAT="${LOG_FORMAT:-text}"
 export LOG_CHANNEL="${LOG_CHANNEL:-stderr}"
+export SCHEDULER_LOG_OUTPUT="${SCHEDULER_LOG_OUTPUT:-/proc/1/fd/2}"
 export QUEUE_LOG_FLAGS=""
+export SCHEDULER_LOG_FLAGS=""
 
 case "$LOG_FORMAT" in
     text)
@@ -12,6 +14,7 @@ case "$LOG_FORMAT" in
     json)
         export LOG_STDERR_FORMATTER='Monolog\Formatter\JsonFormatter'
         export QUEUE_LOG_FLAGS="--json"
+        export SCHEDULER_LOG_FLAGS="--quiet"
         ;;
     *)
         printf 'Invalid LOG_FORMAT: %s. Expected text or json.\n' "$LOG_FORMAT" >&2
