@@ -7,12 +7,11 @@ namespace App\Mail;
 use App\DTOs\ParticipantUpdateData;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use RuntimeException;
+use Illuminate\Support\Facades\Validator;
 
 final class IntakeFormMailable extends Mailable
 {
@@ -30,20 +29,18 @@ final class IntakeFormMailable extends Mailable
     public function envelope(): Envelope
     {
         $recipients = config()->array('mail.intake_form_recipients');
-        $addresses = [];
 
-        foreach ($recipients as $recipient) {
-            throw_if(
-                ! is_string($recipient) || filter_var($recipient, FILTER_VALIDATE_EMAIL) === false,
-                RuntimeException::class,
-                'MAIL_INTAKE_FORM_RECIPIENTS must contain valid email addresses.'
-            );
-
-            $addresses[] = new Address($recipient);
-        }
+        /** @var array{recipients: array<int, string>} $validated */
+        $validated = Validator::make(
+            ['recipients' => $recipients],
+            [
+                'recipients' => ['array'],
+                'recipients.*' => ['required', 'string', 'email'],
+            ],
+        )->validate();
 
         return new Envelope(
-            to: $addresses,
+            to: $validated['recipients'],
             subject: 'Intake Form for '.$this->participant->fullName()
         );
     }

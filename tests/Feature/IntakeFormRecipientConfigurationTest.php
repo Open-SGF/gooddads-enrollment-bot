@@ -30,6 +30,7 @@ it('loads intake form recipients as an optional array', function (?string $value
     'empty' => ['', []],
     'whitespace' => ['   ', []],
     'empty entries' => [' , , ', []],
+    'preserves non-empty invalid entries for validation' => ['0', ['0']],
     'one recipient' => ['intake@example.org', ['intake@example.org']],
     'multiple recipients' => ['intake@example.org,enrollment@example.net', ['intake@example.org', 'enrollment@example.net']],
     'trims and removes empty entries' => [' intake@example.org, , enrollment@example.net, ', ['intake@example.org', 'enrollment@example.net']],

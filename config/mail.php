@@ -19,10 +19,13 @@ return [
     'default' => env('MAIL_MAILER', 'log'),
 
     // Optional destinations for completed intake forms. An empty list disables email.
-    'intake_form_recipients' => array_values(array_filter(
-        array_map(trim(...), explode(',', (string) env('MAIL_INTAKE_FORM_RECIPIENTS', ''))),
-        fn (string $address): bool => $address !== '',
-    )),
+    'intake_form_recipients' => collect(
+        explode(',', (string) env('MAIL_INTAKE_FORM_RECIPIENTS', ''))
+    )
+        ->map(fn (string $address): string => mb_trim($address))
+        ->reject(fn (string $address): bool => $address === '')
+        ->values()
+        ->all(),
 
     /*
     |--------------------------------------------------------------------------

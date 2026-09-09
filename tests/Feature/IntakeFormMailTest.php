@@ -11,6 +11,7 @@ use App\DTOs\SurveyDTO;
 use App\Mail\IntakeFormMailable;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\Mime\Address;
 
 beforeEach(function (): void {
@@ -69,11 +70,14 @@ it('rejects invalid recipients without sending a form', function (array $recipie
     config()->set('mail.intake_form_recipients', $recipients);
 
     expect(fn () => Mail::send($this->mailable))
-        ->toThrow(RuntimeException::class, 'MAIL_INTAKE_FORM_RECIPIENTS must contain valid email addresses.');
+        ->toThrow(ValidationException::class);
 
     expect(Mail::getSymfonyTransport()->messages())->toBeEmpty();
 })->with([
     'invalid address' => [['not-an-email']],
     'mixed valid and invalid addresses' => [['intake@example.org', 'not-an-email']],
     'non-string' => [[false]],
+    'empty address' => [['']],
+    'null address' => [[null]],
+    'zero string' => [['0']],
 ]);
