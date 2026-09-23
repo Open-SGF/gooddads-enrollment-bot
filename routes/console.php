@@ -8,4 +8,5 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('neon:poll-participants --silent')
     ->everyMinute()
     ->withoutOverlapping()
+    ->runInBackground()
     ->appendOutputTo(Config::string('logging.scheduler_output'));
