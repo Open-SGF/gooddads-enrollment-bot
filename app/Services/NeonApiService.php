@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Services;
 
 use Exception;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Throwable;
 
 /**
  * @phpstan-type NeonScalar bool|float|int|string|null
@@ -273,13 +276,17 @@ final readonly class NeonApiService
     /** @return NeonParticipantPayload */
     public function buildFullParticipantRecord(string $personId): array
     {
+        $this->ensureConfigured();
+
+        $envelopes = $this->getMany($this->personSectionRequests($personId));
+
         return [
-            'contactInfo' => $this->fetchPersonContactInfo($personId, false),
-            'children' => $this->fetchPersonChildren($personId, true),
-            'disclosure' => $this->fetchPersonDisclosure($personId, true),
-            'assessment' => $this->fetchPersonAssessment($personId, true),
-            'survey' => $this->fetchPersonSurvey($personId, true),
-            'servicePlan' => $this->fetchPersonServicePlan($personId, true),
+            'contactInfo' => $envelopes['contactInfo'],
+            'children' => $envelopes['children'],
+            'disclosure' => $envelopes['disclosure'],
+            'assessment' => $envelopes['assessment'],
+            'survey' => $envelopes['survey'],
+            'servicePlan' => $envelopes['servicePlan'],
         ];
     }
 
@@ -464,45 +471,58 @@ final readonly class NeonApiService
             ],
         ]);
 
-        $baseUrl = $this->baseUrl.'/data';
+        throw_unless(is_string($whereClause), RuntimeException::class, 'Failed to encode Neon where clause.');
+
         $pageSizeConfig = config('services.neon.page_size', 200);
         $pageSize = is_int($pageSizeConfig) ? $pageSizeConfig : 200;
 
-        // Fetch all records from each table, grouped by persons_id
-        $tableRecords = [];
+        $firstPageRequests = [];
+        foreach ($tableFieldMap as $table => $tableConfig) {
+            $firstPageRequests[$table] = $this->dataRequest(
+                $table,
+                $tableConfig['fields'],
+                $whereClause,
+                1,
+                $pageSize,
+            );
+        }
+
+        $firstPages = $this->getMany($firstPageRequests);
+        $recordsByTable = [];
+        $nextPageRequests = [];
 
         foreach ($tableFieldMap as $table => $tableConfig) {
-            $page = 1;
-            /** @var list<NeonRecord> $allRecords */
-            $allRecords = [];
-            /** @var NeonEnvelope $data */
-            $data = ['records' => []];
-            /** @var list<NeonRecord> $records */
-            $records = [];
+            $envelope = $firstPages[$table];
+            $records = $envelope['records'];
+            $recordsByTable[$table] = $records;
+            $totalResults = $envelope['totalResults'] ?? 0;
 
-            do {
-                $params = [
-                    'key' => $this->apiKey,
-                    'fields' => json_encode($tableConfig['fields']),
-                    'where' => $whereClause,
-                    'page' => $page,
-                    'pageSize' => $pageSize,
-                ];
+            if ($records === [] || count($records) >= $totalResults) {
+                continue;
+            }
 
-                $url = sprintf('%s/%s', $baseUrl, $table);
+            $lastPage = (int) ceil($totalResults / $pageSize);
 
-                $response = Http::get($url, $params);
-                $response->throw();
-                $data = $this->parseEnvelope($response->json());
-                $records = $data['records'];
+            for ($page = 2; $page <= $lastPage; $page++) {
+                $nextPageRequests[$table.':'.$page] = $this->dataRequest(
+                    $table,
+                    $tableConfig['fields'],
+                    $whereClause,
+                    $page,
+                    $pageSize,
+                );
+            }
+        }
 
-                $allRecords = array_merge($allRecords, $records);
-                $page++;
-            } while (! empty($records) && count($allRecords) < ($data['totalResults'] ?? 0));
+        foreach ($this->getMany($nextPageRequests) as $key => $envelope) {
+            $table = explode(':', $key, 2)[0];
+            $recordsByTable[$table] = array_merge($recordsByTable[$table], $envelope['records']);
+        }
 
-            // Group records by persons_id
+        $tableRecords = [];
+        foreach ($tableFieldMap as $table => $tableConfig) {
             $grouped = [];
-            foreach ($allRecords as $record) {
+            foreach ($recordsByTable[$table] as $record) {
                 $personId = $this->recordPersonId($record);
                 if ($personId === null) {
                     continue;
@@ -547,20 +567,22 @@ final readonly class NeonApiService
 
         $incompletePersonIds = array_values(array_diff($allPersonIds, $completePersonIds));
 
-        // Fallback fetchers for tables missing from a person's bulk data
-        $fetchFallback = [
-            'persons' => fn (string $id): array => $this->fetchPersonContactInfo($id, false),
-            'persons_applications_children' => fn (string $id): array => $this->fetchPersonChildren($id, true),
-            'persons_applications' => fn (string $id): array => $this->fetchPersonDisclosure($id, true),
-            'persons_assessment_worksheet' => fn (string $id): array => $this->fetchPersonAssessment($id, true),
-            'persons_introductory_survey' => fn (string $id): array => $this->fetchPersonSurvey($id, true),
-            'persons_service_plan' => fn (string $id): array => $this->fetchPersonServicePlan($id, true),
-        ];
+        $fallbackRequests = [];
+        foreach ($incompletePersonIds as $personId) {
+            $personId = (string) $personId;
+            $sections = $this->personSectionRequests($personId);
 
-        // Build the person_id -> full record map
+            foreach ($tableRecords as $table => $tableData) {
+                if (! isset($tableData['data'][$personId])) {
+                    $fallbackRequests[$personId.'|'.$table] = $sections[$tableData['key']];
+                }
+            }
+        }
+
+        $fallbackEnvelopes = $this->getMany($fallbackRequests);
+
         $fullRecords = [];
 
-        // Already-complete persons: wrap bulk data to match fetch() response shape
         foreach ($completePersonIds as $personId) {
             $personId = (string) $personId;
             $record = [];
@@ -573,14 +595,13 @@ final readonly class NeonApiService
             $fullRecords[$personId] = $record;
         }
 
-        // Incomplete persons: bulk data gets wrapped; fallback already returns fetch() shape
         foreach ($incompletePersonIds as $personId) {
             $personId = (string) $personId;
             $record = [];
             foreach ($tableRecords as $table => $tableData) {
                 $record[$tableData['key']] = isset($tableData['data'][$personId])
                     ? ['records' => $tableData['data'][$personId]]
-                    : $fetchFallback[$table]($personId);
+                    : $fallbackEnvelopes[$personId.'|'.$table];
             }
 
             $fullRecords[$personId] = $record;
@@ -604,35 +625,235 @@ final readonly class NeonApiService
     {
         $this->ensureConfigured();
 
-        $url = sprintf('%s/data/%s', $this->baseUrl, $endpoint);
+        $where = null;
+        if ($personId !== null && $useWhereClause) {
+            $where = $this->personWhere($personId);
+        }
 
-        $params = [
-            'key' => $this->apiKey,
+        return $this->getMany([
+            'fetch' => $this->dataRequest($endpoint, $fields, $where),
+        ])['fetch'];
+    }
+
+    /**
+     * @return array<string, array{url: string, query: array<string, mixed>}>
+     */
+    private function personSectionRequests(string $personId): array
+    {
+        $where = $this->personWhere($personId);
+
+        return [
+            'contactInfo' => $this->dataRequest('persons/'.$personId, [
+                'firstName',
+                'lastName',
+                'regions_id',
+                'enteredDate',
+                'address1',
+                'address2',
+                'city',
+                'state',
+                'zip',
+                'employer',
+                'tShirtSize',
+                'homeCellPhone',
+                'workPhone',
+                'otherNumber',
+                'email',
+                'probationParoleCaseWorkerName',
+                'probationParoleCaseWorkerPhone',
+                'contactWithChildren',
+                'contactType',
+                'monthlyChildSupportPayment',
+                'maritalStatus',
+                'ethnicity',
+            ]),
+            'children' => $this->dataRequest('persons_applications_children', [
+                'firstName',
+                'lastName',
+                'dateOfBirth',
+            ], $where),
+            'disclosure' => $this->dataRequest('persons_applications', [
+                'persons_id',
+                'division',
+                'divisionOther',
+                'homeCellPhone',
+                'dateOfBirth',
+                'fullAddress',
+                'city',
+                'state',
+                'email',
+                'releaseTo',
+                'releaseToOther',
+                'releaseToOtherAddress',
+                'purposeOfDisclosure',
+                'programName',
+                'purposeOfDisclosureOther',
+                'informationToBeDisclosed',
+                'informationToBeDisclosedOther',
+                'acceptsTextMessage',
+            ], $where),
+            'assessment' => $this->dataRequest('persons_assessment_worksheet', [
+                'persons_id',
+                'fullName',
+                'dateOfBirth',
+                'missouriResident',
+                'childUnder18',
+                'financiallyEligible',
+                'dL',
+                'utilityBill',
+                'payStub',
+                'writtenEmployerStatement',
+                'socialSecurityBenefitsStatement',
+                'selfAttestationOfNoEmploymentOrIncome',
+                'unemploymentCompensation',
+                'other',
+                'hoseholdIncome',
+                'numberOfFamilyMembersInHousehold',
+                'percentageOfFPL',
+            ], $where),
+            'survey' => $this->dataRequest('persons_introductory_survey', [
+                'persons_id',
+                'dateOfBirth',
+                'programName',
+                'reasons',
+                'reasonsOther',
+                'hearAboutUs',
+                'hearAboutUsOther',
+                'expectToGain',
+                'expectToGainOther',
+            ], $where),
+            'servicePlan' => $this->dataRequest('persons_service_plan', [
+                'persons_id',
+                'programName',
+                'reviewDates',
+                'serviceAreas',
+                'serviceIdentifiedByTheParticipants',
+                'goals_parentingSkills',
+                'goals_parentingSkillsObj',
+                'goals_parentingSkillsPersonRes',
+                'goals_parentingSkillsTimeline',
+                'goals_parentingSkillsMeasure',
+                'goals_managingStress',
+                'goals_managingStressObj',
+                'goals_managingStressPersonRes',
+                'goals_managingStressTimeline',
+                'goals_managingStressMeasure',
+                'goals_custodyVisitation',
+                'goals_custodyVisitationObj',
+                'goals_custodyVisitationPersonRes',
+                'goals_custodyVisitationTimeline',
+                'goals_custodyVisitationMeasure',
+                'goals_educationEmployment',
+                'goals_educationEmploymentObj',
+                'goals_educationEmploymentPersonRes',
+                'goals_educationEmploymentTimeline',
+                'goals_educationEmploymentMeasure',
+                'goals_housingTransportation',
+                'goals_housingTransportationObj',
+                'goals_housingTransportationPersonRes',
+                'goals_housingTransportationTimeline',
+                'goals_housingTransportationMeasure',
+                'goals_childSupportAction',
+                'goals_childSupportActionObj',
+                'goals_childSupportActionPersonRes',
+                'goals_childSupportActionTimeline',
+                'goals_childSupportActionMeasure',
+                'goals_childSupportAwareness',
+                'goals_childSupportAwarenessObj',
+                'goals_childSupportAwarenessPersonRes',
+                'goals_childSupportAwarenessTimeline',
+                'goals_childSupportAwarenessMeasure',
+                'goals_effectiveCoParenting',
+                'goals_effectiveCoParentingObj',
+                'goals_effectiveCoParentingPersonRes',
+                'goals_effectiveCoParentingTimeline',
+                'goals_effectiveCoParentingMeasure',
+                'goals_fatherToFatherMentoring',
+                'goals_fatherToFatherMentoringObj',
+                'goals_fatherToFatherMentoringPersonRes',
+                'goals_fatherToFatherMentoringTimeline',
+                'goals_fatherToFatherMentoringMeasure',
+            ], $where),
         ];
+    }
+
+    private function personWhere(string $personId): string
+    {
+        $where = json_encode([
+            'whereType' => 'AND',
+            'clauses' => [
+                [
+                    'fieldName' => 'persons_id',
+                    'operator' => '=',
+                    'operand' => $personId,
+                    'type' => 'id',
+                ],
+            ],
+        ]);
+
+        throw_unless(is_string($where), RuntimeException::class, 'Failed to encode Neon where clause.');
+
+        return $where;
+    }
+
+    /**
+     * @param  list<string>  $fields
+     * @return array{url: string, query: array<string, mixed>}
+     */
+    private function dataRequest(string $endpoint, array $fields, ?string $where = null, ?int $page = null, ?int $pageSize = null): array
+    {
+        $query = ['key' => $this->apiKey];
 
         if ($fields !== []) {
-            $params['fields'] = json_encode($fields);
+            $query['fields'] = json_encode($fields);
         }
 
-        // Add WHERE clause only if requested
-        if ($personId !== null && $useWhereClause) {
-            $params['where'] = json_encode([
-                'whereType' => 'AND',
-                'clauses' => [
-                    [
-                        'fieldName' => 'persons_id',
-                        'operator' => '=',
-                        'operand' => $personId,
-                        'type' => 'id',
-                    ],
-                ],
-            ]);
+        if ($where !== null) {
+            $query['where'] = $where;
         }
 
-        $response = Http::get($url, $params);
-        $response->throw();
+        if ($page !== null && $pageSize !== null) {
+            $query['page'] = $page;
+            $query['pageSize'] = $pageSize;
+        }
 
-        return $this->parseEnvelope($response->json());
+        return [
+            'url' => sprintf('%s/data/%s', $this->baseUrl, $endpoint),
+            'query' => $query,
+        ];
+    }
+
+    /**
+     * @param  array<string, array{url: string, query: array<string, mixed>}>  $requests
+     * @return array<string, NeonEnvelope>
+     */
+    private function getMany(array $requests): array
+    {
+        if ($requests === []) {
+            return [];
+        }
+
+        /** @var array<string, Response|Throwable> $responses */
+        $responses = Http::pool(function (Pool $pool) use ($requests): void {
+            foreach ($requests as $key => $request) {
+                $pool->as($key)->get($request['url'], $request['query']);
+            }
+        });
+
+        $envelopes = [];
+
+        foreach ($requests as $key => $_) {
+            $response = $responses[$key] ?? null;
+
+            throw_unless($response instanceof Response, $response instanceof Throwable
+                ? $response
+                : new RuntimeException("Missing Neon response for [{$key}]."));
+
+            $response->throw();
+            $envelopes[$key] = $this->parseEnvelope($response->json());
+        }
+
+        return $envelopes;
     }
 
     /** @return NeonEnvelope */
