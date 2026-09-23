@@ -65,7 +65,7 @@ final class PdfFillFields extends Command
             return 1;
         }
 
-        $this->info('✅ Filled PDF saved to: '.$outputPath);
+        $this->info('Filled PDF saved to: '.$outputPath);
 
         // Optional: store it using Laravel’s Storage
         $contents = file_get_contents($outputPath);

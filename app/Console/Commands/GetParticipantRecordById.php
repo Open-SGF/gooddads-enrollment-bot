@@ -37,7 +37,7 @@ final class GetParticipantRecordById extends Command
             return;
         }
 
-        $this->info(sprintf('🔍 Collecting records for participant id - %s....', $id));
+        $this->info(sprintf('Collecting records for participant id - %s....', $id));
         $record = $this->neonApi->buildFullParticipantRecord($id);
 
         // Extract all 'records' sub-arrays dynamically from the parent array
@@ -54,7 +54,7 @@ final class GetParticipantRecordById extends Command
         $encodedRecord = json_encode($record);
 
         if ($encodedRecord === false) {
-            $this->warn('⏭️ Participant '.$id.' could not be hashed. Skipping pdf regeneration.');
+            $this->warn('Participant '.$id.' could not be hashed. Skipping pdf regeneration.');
 
             return;
         }
@@ -63,17 +63,17 @@ final class GetParticipantRecordById extends Command
 
         // Check if hash already exists
         if (! NeonHash::query()->where('id', $hash)->exists()) {
-            $this->info('🔄 Generating hash....');
+            $this->info('Generating hash....');
             NeonHash::query()->create(['id' => $hash]);
         }
 
-        $this->info('🔄 Transforming participant data to serializable DTO');
+        $this->info('Transforming participant data to serializable DTO');
         // Transform the participant data into serializable DTOs
         $participantData = NeonDTOTransformer::transformParticipantData($record);
 
         // Queue the pdf generation job
-        $this->info('📬 Queing pdf regeneration');
+        $this->info('Queuing PDF regeneration');
         dispatch(new GenerateParticipantPdfJob($participantData));
-        $this->info('✅ Polling complete.');
+        $this->info('Polling complete.');
     }
 }

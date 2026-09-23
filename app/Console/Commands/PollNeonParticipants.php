@@ -14,27 +14,24 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
+use OpenTelemetry\API\Globals;
+use OpenTelemetry\API\Trace\Span;
+use OpenTelemetry\API\Trace\StatusCode;
+use Throwable;
 
 #[Description("Polls Neon for today's participants and queues PDFs for new records")]
 #[Signature('neon:poll-participants {--date= : Date to process Y-m-d (defaults to today)}')]
 final class PollNeonParticipants extends Command
 {
-    public function __construct(/**
-     * Inject NeonApiService.
-     */
-        private readonly NeonApiService $neonApi)
+    public function __construct(private readonly NeonApiService $neonApi)
     {
         parent::__construct();
     }
 
-    /**
-     * Execute the console command.
-     */
     public function handle(): void
     {
-        Log::info('Starting Neon participant poll.');
-
         try {
             $date = $this->option('date') ? $this->parseDate($this->option('date')) : Date::today('America/Chicago');
         } catch (InvalidArgumentException $invalidArgumentException) {
@@ -43,47 +40,90 @@ final class PollNeonParticipants extends Command
             return;
         }
 
-        $this->info(sprintf('🔍 Collecting participant records that have been added or updated today - %s....', $date));
-        // $toReturn = $this->getParticipantIdsByDate($todaysDate);
-        $fullRecords = $this->neonApi->getFullParticipantRecordsByDate($date->format('Y-m-d'));
-        $count = count($fullRecords);
-        $this->info(sprintf('📋 Found %d new or updated participant records.', $count));
+        $pollId = (string) Str::uuid();
+        $filterDate = $date->format('Y-m-d');
+        $started = hrtime(true);
 
-        foreach ($fullRecords as $participantId => $fullRecord) {
-            $participantId = (string) $participantId;
+        Log::info('Neon poll started.', ['poll_id' => $pollId, 'date' => $filterDate]);
 
-            // Create a hash of the full record
-            $encodedRecord = json_encode($fullRecord);
+        try {
+            $span = Globals::tracerProvider()->getTracer('gooddads-enrollment-bot')
+                ->spanBuilder('neon.fetch')->startSpan();
+            $scope = $span->activate();
+            $fetchStarted = hrtime(true);
 
-            if ($encodedRecord === false) {
-                $this->warn('⏭️ Participant '.$participantId.' could not be hashed. Skipping pdf regeneration.');
+            try {
+                $fullRecords = $this->neonApi->getFullParticipantRecordsByDate($filterDate);
+                $span->setAttribute('participants.count', count($fullRecords));
+            } catch (Throwable $exception) {
+                $span->recordException($exception);
+                $span->setStatus(StatusCode::STATUS_ERROR);
 
-                continue;
+                throw $exception;
+            } finally {
+                $scope->detach();
+                $span->end();
             }
 
-            $hash = hash('sha256', $encodedRecord);
+            $count = count($fullRecords);
+            Log::info('Neon participants fetched.', [
+                'poll_id' => $pollId,
+                'date' => $filterDate,
+                'participants' => $count,
+                'duration_ms' => (int) ((hrtime(true) - $fetchStarted) / 1_000_000),
+            ]);
+            $this->info(sprintf('Found %d new or updated participant records.', $count));
 
-            // Check if hash already exists
-            if (! NeonHash::query()->where('id', $hash)->exists()) {
-                $this->info('✅ Participant '.$participantId.' has updated data.');
-                // Store the hash for the participant data for future comparison
-                $this->info('🔄 Generating hash....');
+            $queued = 0;
+            $unchanged = 0;
+            $skipped = 0;
+
+            foreach ($fullRecords as $participantId => $fullRecord) {
+                $encodedRecord = json_encode($fullRecord);
+
+                if ($encodedRecord === false) {
+                    $skipped++;
+                    Log::warning('Participant record could not be hashed.', [
+                        'poll_id' => $pollId,
+                        'participant_id' => (string) $participantId,
+                    ]);
+
+                    continue;
+                }
+
+                $hash = hash('sha256', $encodedRecord);
+
+                if (NeonHash::query()->where('id', $hash)->exists()) {
+                    $unchanged++;
+
+                    continue;
+                }
+
                 NeonHash::query()->create(['id' => $hash]);
-
-                $this->info('🔄 Transforming participant data to serializable DTO');
-                // Transform the participant data into serializable DTOs
                 $participantData = NeonDTOTransformer::transformParticipantData($fullRecord);
-
-                // Queue the pdf generation job
-                $this->info('📬 Queing pdf regeneration');
-                dispatch(new GenerateParticipantPdfJob($participantData));
-
-            } else {
-                $this->info('⏭️ Participant '.$participantId.' has no updated data. Skipping pdf regeneration.');
+                dispatch(new GenerateParticipantPdfJob($participantData, $pollId));
+                $queued++;
             }
-        }
 
-        $this->info('✅ Polling complete.');
+            $counts = ['queued' => $queued, 'unchanged' => $unchanged, 'skipped' => $skipped];
+            Span::getCurrent()->addEvent('participants.classified', $counts);
+            Log::info('Neon poll completed.', [
+                'poll_id' => $pollId,
+                'date' => $filterDate,
+                'participants' => $count,
+                ...$counts,
+                'duration_ms' => (int) ((hrtime(true) - $started) / 1_000_000),
+            ]);
+            $this->info('Polling complete.');
+        } catch (Throwable $throwable) {
+            Log::error('Neon poll failed.', [
+                'poll_id' => $pollId,
+                'date' => $filterDate,
+                'exception' => $throwable::class,
+            ]);
+
+            throw $throwable;
+        }
     }
 
     private function parseDate(string $date): Carbon
