@@ -64,15 +64,11 @@ final readonly class DropboxUploadService
     private function normalizeUploadContents(string $contents): string
     {
         if ($this->looksLikeFilesystemPath($contents)) {
-            if (! is_file($contents) || ! is_readable($contents)) {
-                throw new InvalidArgumentException('File not found or not readable');
-            }
+            throw_if(! is_file($contents) || ! is_readable($contents), InvalidArgumentException::class, 'File not found or not readable');
 
             $fileContents = @file_get_contents($contents);
 
-            if ($fileContents === false) {
-                throw new InvalidArgumentException('File not found or not readable');
-            }
+            throw_if($fileContents === false, InvalidArgumentException::class, 'File not found or not readable');
 
             return $fileContents;
         }

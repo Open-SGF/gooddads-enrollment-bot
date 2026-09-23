@@ -10,14 +10,11 @@ use App\DTOs\ServicePlanDTO;
 use App\DTOs\SurveyDTO;
 use App\Mail\IntakeFormMailable;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Storage;
 use Symfony\Component\Mime\Address;
 
 beforeEach(function (): void {
     config()->set('mail.default', 'array');
     config()->set('mail.from.address', 'sender@example.org');
-    Storage::fake();
-    Storage::put('participant-forms/123/intake.pdf', '%PDF-1.4 test attachment');
 
     $participant = new ParticipantUpdateData(
         id: '123',
@@ -44,10 +41,10 @@ beforeEach(function (): void {
         servicePlan: new ServicePlanDTO,
     );
 
-    $this->mailable = new IntakeFormMailable($participant, 'participant-forms/123/intake.pdf');
+    $this->mailable = new IntakeFormMailable($participant);
 });
 
-it('sends the form and PDF attachment to the given recipient', function (string $recipient): void {
+it('sends the form without a PDF attachment to the given recipient', function (string $recipient): void {
     $sent = Mail::to($recipient)->send($this->mailable);
     $message = $sent->getOriginalMessage();
 
@@ -55,7 +52,5 @@ it('sends the form and PDF attachment to the given recipient', function (string 
         ->and($message->getFrom()[0]->getAddress())->toBe('sender@example.org')
         ->and($message->getSubject())->toBe('Intake Form for Test Participant')
         ->and($message->getHtmlBody())->toContain('Test Participant')
-        ->and($message->getAttachments())->toHaveCount(1)
-        ->and($message->getAttachments()[0]->getFilename())->toBe('intake-form.pdf')
-        ->and($message->getAttachments()[0]->getBody())->toBe('%PDF-1.4 test attachment');
+        ->and($message->getAttachments())->toBe([]);
 })->with(['intake@example.org', 'enrollment@example.net']);

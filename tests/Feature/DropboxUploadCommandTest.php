@@ -39,20 +39,15 @@ it('uploads through the Dropbox client with atomic autorename enabled', function
     $client = Mockery::mock(Client::class);
     $client->shouldReceive('upload')
         ->once()
-        ->withArgs(fn (string $path, mixed $contents, string $mode, bool $autorename): bool => $path === '/uploads/dropbox-test/upload-probe.txt'
-            && is_resource($contents)
-            && stream_get_contents($contents) === 'probe content'
+        ->withArgs(fn (string $path, string $contents, string $mode, bool $autorename): bool => $path === '/uploads/dropbox-test/upload-probe.txt'
+            && $contents === 'probe content'
             && $mode === 'add'
             && $autorename)
-        ->andReturnUsing(function (string $path, mixed $contents): array {
-            fclose($contents);
-
-            return [
-                'id' => 'id:dropbox-file-id',
-                'path_display' => '/uploads/dropbox-test/upload-probe (1).txt',
-                'size' => 13,
-            ];
-        });
+        ->andReturn([
+            'id' => 'id:dropbox-file-id',
+            'path_display' => '/uploads/dropbox-test/upload-probe (1).txt',
+            'size' => 13,
+        ]);
 
     $service = new DropboxUploadService($client);
     $metadata = $service->upload($absoluteLocalPath, 'dropbox-test/upload-probe.txt');
@@ -71,11 +66,8 @@ it('propagates errors from the Dropbox client', function (): void {
     $client = Mockery::mock(Client::class);
     $client->shouldReceive('upload')
         ->once()
-        ->andReturnUsing(function (string $path, mixed $contents): never {
-            fclose($contents);
-
-            throw new RuntimeException('Dropbox API request failed');
-        });
+        ->with('/uploads/dropbox-test/upload-fail-probe.txt', 'failure probe content', 'add', true)
+        ->andThrow(new RuntimeException('Dropbox API request failed'));
 
     $service = new DropboxUploadService($client);
 
@@ -84,3 +76,31 @@ it('propagates errors from the Dropbox client', function (): void {
 
     Storage::delete('dropbox-test/upload-fail-probe.txt');
 });
+
+it('uploads raw PDF bytes without changing the binary contents', function (): void {
+    $contents = "%PDF-1.4\n\0\xFF\x80 binary PDF contents";
+    $client = Mockery::mock(Client::class);
+    $client->shouldReceive('upload')->once()
+        ->with('/uploads/participant-forms/123/intake.pdf', $contents, 'add', true)
+        ->andReturn(['id' => 'id:raw-pdf']);
+
+    $metadata = new DropboxUploadService($client)->upload($contents, 'participant-forms/123/intake.pdf');
+
+    expect($metadata)->toHaveKey('id', 'id:raw-pdf');
+});
+
+it('rejects empty PDF contents before calling Dropbox', function (): void {
+    $client = Mockery::mock(Client::class);
+    $client->shouldNotReceive('upload');
+
+    expect(fn (): array => new DropboxUploadService($client)->upload('', 'empty.pdf'))
+        ->toThrow(InvalidArgumentException::class, 'Cannot upload empty PDF contents');
+});
+
+it('rejects missing Windows file paths before calling Dropbox', function (string $path): void {
+    $client = Mockery::mock(Client::class);
+    $client->shouldNotReceive('upload');
+
+    expect(fn (): array => new DropboxUploadService($client)->upload($path, 'missing.pdf'))
+        ->toThrow(InvalidArgumentException::class, 'File not found or not readable');
+})->with(['C:/missing-intake.pdf', 'C:\\missing-intake.pdf']);
