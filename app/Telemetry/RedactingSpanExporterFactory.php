@@ -12,6 +12,6 @@ final class RedactingSpanExporterFactory implements SpanExporterFactoryInterface
 {
     public function create(): SpanExporterInterface
     {
-        return new RedactingSpanExporter((new OtlpSpanExporterFactory())->create());
+        return new RedactingSpanExporter(new OtlpSpanExporterFactory()->create());
     }
 }

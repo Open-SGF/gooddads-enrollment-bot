@@ -12,6 +12,6 @@ final class RedactingConsoleSpanExporterFactory implements SpanExporterFactoryIn
 {
     public function create(): SpanExporterInterface
     {
-        return new RedactingSpanExporter((new ConsoleSpanExporterFactory())->create());
+        return new RedactingSpanExporter(new ConsoleSpanExporterFactory()->create());
     }
 }

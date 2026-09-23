@@ -46,12 +46,14 @@ final readonly class RedactingSpanExporter implements SpanExporterInterface
                         $value = preg_replace('/([?&]key=)[^&#]*/i', '$1[REDACTED]', $value);
                     }
                 }
+
                 if (is_string($value)) {
                     $value = $redact($value);
                 } elseif (is_array($value)) {
-                    $value = array_map(static fn ($item) => is_string($item) ? $redact($item) : $item, $value);
+                    $value = array_map(static fn ($item): mixed => is_string($item) ? $redact($item) : $item, $value);
                 }
             }
+
             unset($value);
 
             return new RedactedAttributes($original, $values);
@@ -80,23 +82,12 @@ final readonly class RedactingSpanExporter implements SpanExporterInterface
 /** @internal */
 final readonly class RedactedSpanData implements SpanDataInterface
 {
-    /** @var Closure(AttributesInterface): AttributesInterface */
-    // @phpstan-ignore missingType.iterableValue, missingType.iterableValue (SDK interface extends Traversable without a value type)
-    private Closure $attributes;
-
-    /** @var Closure(string): string */
-    private Closure $redact;
-
     /**
      * @param  Closure(AttributesInterface): AttributesInterface  $attributes
      * @param  Closure(string): string  $redact
      */
     // @phpstan-ignore missingType.iterableValue, missingType.iterableValue (SDK interface extends Traversable without a value type)
-    public function __construct(private SpanDataInterface $span, Closure $attributes, Closure $redact)
-    {
-        $this->attributes = $attributes;
-        $this->redact = $redact;
-    }
+    public function __construct(private SpanDataInterface $span, private Closure $attributes, private Closure $redact) {}
 
     public function getName(): string
     {
