@@ -11,6 +11,7 @@ use App\Transformers\NeonDTOTransformer;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
@@ -120,6 +121,7 @@ final class PollNeonParticipants extends Command
                 'poll_id' => $pollId,
                 'date' => $filterDate,
                 'exception' => $throwable::class,
+                'status_code' => $throwable instanceof RequestException ? $throwable->response->status() : null,
             ]);
 
             throw $throwable;

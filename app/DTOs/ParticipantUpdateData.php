@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\DTOs;
 
-use Illuminate\Support\Facades\Log;
-
 final readonly class ParticipantUpdateData
 {
     /**
@@ -87,13 +85,6 @@ final readonly class ParticipantUpdateData
                     $missing['child_'.$index] = $child->getMissingFields();
                 }
             }
-        }
-
-        if ($missing !== []) {
-            Log::warning('ParticipantUpdateData: missing fields detected', [
-                'participant_id' => $this->id,
-                'missing' => $missing,
-            ]);
         }
 
         return $missing;
