@@ -55,7 +55,7 @@ jobs:
           php-version: '8.5'
           coverage: none
           tools: composer:v2
-          extensions: sqlite3, pdo_sqlite, pdo_mysql
+          extensions: sqlite3, pdo_sqlite, pdo_mysql, opentelemetry
           cache: composer
 
       - name: Create .env file for CI

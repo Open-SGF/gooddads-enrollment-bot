@@ -8,75 +8,131 @@ use App\DTOs\ParticipantUpdateData;
 use App\Mail\IntakeFormMailable;
 use App\Services\DropboxUploadService;
 use App\Services\PdfIntakeFormService;
-use Exception;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use OpenTelemetry\API\Globals;
+use OpenTelemetry\API\Trace\Span;
+use OpenTelemetry\API\Trace\StatusCode;
+use Throwable;
 
 final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable;
 
-    /** Create a new job instance. */
     public function __construct(
-        public readonly ParticipantUpdateData $updatedParticipantData
+        public readonly ParticipantUpdateData $updatedParticipantData,
+        public readonly ?string $pollId = null,
     ) {}
 
-    /**
-     * Execute the job.
-     */
     public function handle(
         PdfIntakeFormService $pdfService,
         DropboxUploadService $dropboxService
     ): void {
+        $context = [
+            'poll_id' => $this->pollId,
+            'participant_id' => $this->updatedParticipantData->id,
+            'job_id' => $this->job?->uuid(),
+            'attempt' => $this->job?->attempts(),
+        ];
+        $started = hrtime(true);
+        $stage = 'pdf.generate';
+
         try {
-            // Fetch and transform participant data
-            // $fullRecord = $neonApi->buildFullParticipantRecord($this->participantId);
-            // $participant = $transformer->transformPerson($fullRecord);
+            $span = Globals::tracerProvider()->getTracer('gooddads-enrollment-bot')
+                ->spanBuilder('pdf.generate')->startSpan();
+            $scope = $span->activate();
 
-            // Generate the PDF
-            Log::info('🔄 Generating PDF.');
-            $pdfGenerationResult = $pdfService->generate($this->updatedParticipantData);
-            Log::info('✅ PDF-generation complete');
+            try {
+                $pdfGenerationResult = $pdfService->generate($this->updatedParticipantData);
+            } catch (Throwable $exception) {
+                $span->recordException($exception);
+                $span->setStatus(StatusCode::STATUS_ERROR);
 
-            // Check if the required participant form fields are filled
-            if ($this->updatedParticipantData->hasMissingFields()) {
-                // Send email
-                Log::warning('⚠️ PDF not generated for participant '.$this->updatedParticipantData->id.': missing required fields', [
-                    'missing_fields' => $this->updatedParticipantData->getMissingFields(),
+                throw $exception;
+            } finally {
+                $scope->detach();
+                $span->end();
+            }
+
+            $stage = 'participant.validate';
+            $missingFields = $this->updatedParticipantData->getMissingFields();
+            if ($missingFields !== []) {
+                Span::getCurrent()->addEvent('delivery.blocked', ['reason' => 'missing_fields']);
+                Log::warning('Participant delivery blocked by missing required fields.', [
+                    ...$context,
+                    'missing_fields' => $missingFields,
                 ]);
 
-            } else {
+                return;
+            }
 
-                // Upload to Dropbox
-                $dropboxPath = 'participant-forms/'.$this->updatedParticipantData->id.'/'.$pdfGenerationResult->filename;
+            $stage = 'dropbox.upload';
+            $dropbox = 'succeeded';
+            $dropboxPath = 'participant-forms/'.$this->updatedParticipantData->id.'/'.$pdfGenerationResult->filename;
+            try {
+                $dropboxService->upload($pdfGenerationResult->contents, $dropboxPath);
+            } catch (Throwable $exception) {
+                $dropbox = 'failed';
+                Span::getCurrent()->addEvent('dropbox.upload_failed', ['exception.type' => $exception::class]);
+                Span::getCurrent()->setStatus(StatusCode::STATUS_ERROR);
+                Log::warning('Dropbox upload failed; continuing to email.', [
+                    ...$context,
+                    'exception' => $exception::class,
+                    'status_code' => $exception instanceof RequestException ? $exception->getResponse()?->getStatusCode() : null,
+                ]);
+            }
 
-                try {
-                    $dropboxService->upload($pdfGenerationResult->contents, $dropboxPath);
-                    Log::info('✅ Dropbox upload complete.');
-                } catch (Exception $e) {
-                    Log::warning('⚠️ Dropbox upload failed, skipping. Reason: '.$e->getMessage());
+            $sent = 0;
+            $skipped = 0;
+            foreach (config()->array('mail.intake_form_recipients') as $index => $recipient) {
+                if (validator(['email' => $recipient], ['email' => 'required|string|email'])->fails()) {
+                    $skipped++;
+                    Span::getCurrent()->addEvent('email.skipped', ['reason' => 'invalid_recipient']);
+                    Log::warning('Skipping PDF email for invalid recipient.', [...$context, 'recipient_index' => $index]);
+
+                    continue;
                 }
 
-                foreach (config()->array('mail.intake_form_recipients') as $recipient) {
-                    if (validator(['email' => $recipient], ['email' => 'required|string|email'])->fails()) {
-                        Log::warning('Skipping PDF email for invalid recipient.', ['recipient' => $recipient]);
+                $stage = 'email.send';
+                $span = Globals::tracerProvider()->getTracer('gooddads-enrollment-bot')
+                    ->spanBuilder('email.send')->startSpan();
+                $scope = $span->activate();
 
-                        continue;
-                    }
+                try {
+                    Mail::to($recipient)->send(new IntakeFormMailable($this->updatedParticipantData));
+                    $sent++;
+                } catch (Throwable $exception) {
+                    $span->recordException($exception);
+                    $span->setStatus(StatusCode::STATUS_ERROR);
 
-                    Log::info('📧 Sending PDF email for participant '.$this->updatedParticipantData->id);
-                    Mail::to($recipient)
-                        ->send(new IntakeFormMailable($this->updatedParticipantData));
-                    Log::info('✅ PDF email sent.');
+                    throw $exception;
+                } finally {
+                    $scope->detach();
+                    $span->end();
                 }
             }
 
-        } catch (Exception $exception) {
-            Log::error('Failed to generate PDF for participant '.$this->updatedParticipantData->id.': '.$exception->getMessage());
-            throw $exception; // Let the job retry if needed
+            Log::info('Participant processing completed.', [
+                ...$context,
+                'pdf' => 'succeeded',
+                'dropbox' => $dropbox,
+                'email_sent' => $sent,
+                'email_skipped' => $skipped,
+                'duration_ms' => (int) ((hrtime(true) - $started) / 1_000_000),
+            ]);
+        } catch (Throwable $throwable) {
+            Log::error('Participant processing failed.', [
+                ...$context,
+                'stage' => $stage,
+                'exception' => $throwable::class,
+                'error_code' => $throwable->getCode() ?: null,
+            ]);
+
+            throw $throwable;
         }
     }
 }

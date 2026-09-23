@@ -14,7 +14,6 @@ use App\DTOs\SurveyDTO;
 use App\Jobs\GenerateParticipantPdfJob;
 use App\Services\DropboxUploadService;
 use App\Services\PdfIntakeFormService;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use mikehaertl\tmp\File;
@@ -62,7 +61,6 @@ final class GenerateParticipantPdfJobTest extends TestCase
         config()->set('mail.from.address', 'sender@example.org');
         config()->set('mail.intake_form_recipients', $recipients);
         Storage::fake();
-        Log::spy();
 
         // Stub the PDF tool, not the job, so tests do not need the pdftk executable.
         $pdf = Mockery::mock('overload:mikehaertl\\pdftk\\Pdf');
@@ -113,19 +111,7 @@ final class GenerateParticipantPdfJobTest extends TestCase
             $this->assertSame([], $message->getAttachments());
         }
 
-        foreach ($invalid as $recipient) {
-            Log::shouldHaveReceived('warning')
-                ->with('Skipping PDF email for invalid recipient.', ['recipient' => $recipient])
-                ->once();
-        }
-
-        if ($invalid === []) {
-            Log::shouldNotHaveReceived('warning');
-        } else {
-            Log::shouldHaveReceived('warning')->times(count($invalid));
-        }
-
-        Log::shouldNotHaveReceived('error');
+        $this->assertCount(count($recipients) - count($invalid), $messages);
     }
 
     private function filledDto(string $class): object

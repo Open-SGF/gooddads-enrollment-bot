@@ -39,6 +39,7 @@ RUN apt-get update && apt-get upgrade -y \
         php8.5-mongodb \
         php8.5-imap \
         php8.5-mysql \
+        php8.5-opentelemetry \
         php8.5-mbstring \
         php8.5-xml \
         php8.5-zip \

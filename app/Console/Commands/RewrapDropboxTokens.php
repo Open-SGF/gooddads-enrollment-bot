@@ -17,7 +17,7 @@ use Throwable;
 
 #[Description('Re-encrypt Dropbox token values with the current APP_KEY (useful after APP_KEY rotation)')]
 #[Signature('dropbox:rewrap-tokens
-        {--from-key= : Previous APP_KEY (e.g. base64:...) used to decrypt existing token values}
+        {--from-key= : Previous APP_KEY (e.g. base64:OLD_APP_KEY) used to decrypt existing token values}
         {--force : Skip confirmation prompt}')]
 final class RewrapDropboxTokens extends Command
 {

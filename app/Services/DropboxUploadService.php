@@ -30,9 +30,7 @@ final readonly class DropboxUploadService
     public function upload(string $contents, string $dropboxPath): array
     {
         if ($contents === '') {
-            Log::error('Dropbox upload failed: empty PDF contents.', [
-                'dropbox_path' => $dropboxPath,
-            ]);
+            Log::error('Dropbox upload failed: empty PDF contents.');
             throw new InvalidArgumentException('Cannot upload empty PDF contents to Dropbox.');
         }
 
@@ -40,7 +38,6 @@ final readonly class DropboxUploadService
 
         Log::debug('Dropbox upload starting.', [
             'payload_size' => mb_strlen($contents, '8bit'),
-            'dropbox_path' => $fullDropboxPath,
         ]);
 
         $metadata = $this->dropboxClient->upload(
@@ -51,7 +48,6 @@ final readonly class DropboxUploadService
         );
 
         Log::info('Dropbox upload succeeded.', [
-            'dropbox_path' => $metadata['path_display'] ?? $fullDropboxPath,
             'file_id' => $metadata['id'] ?? null,
             'size' => $metadata['size'] ?? null,
         ]);

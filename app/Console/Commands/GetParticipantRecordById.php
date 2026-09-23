@@ -11,6 +11,7 @@ use App\Transformers\NeonDTOTransformer;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Log;
 
 #[Description('Polls Neon for a specified participantid and queues PDF generation')]
 #[Signature('neon:fetch-by-id {id : Participant id to process}')]
@@ -32,12 +33,14 @@ final class GetParticipantRecordById extends Command
         $id = $this->argument('id');
 
         if (! is_numeric($id)) {
-            $this->error(sprintf("Invalid id - '%s' is not a number.", $id));
+            Log::warning('Invalid participant ID.', ['participant_id' => (string) $id]);
+            $this->error('Invalid participant ID.');
 
             return;
         }
 
-        $this->info(sprintf('🔍 Collecting records for participant id - %s....', $id));
+        Log::info('Neon participant fetch started.', ['participant_id' => (string) $id]);
+        $this->info('Collecting participant records.');
         $record = $this->neonApi->buildFullParticipantRecord($id);
 
         // Extract all 'records' sub-arrays dynamically from the parent array
@@ -45,7 +48,8 @@ final class GetParticipantRecordById extends Command
 
         // Filter out any empty arrays. If the result is empty, ALL records are empty.
         if (array_filter($allExtractedRecords) === []) {
-            $this->error(sprintf('No participant found for id - %s', $id));
+            Log::warning('Neon participant not found.', ['participant_id' => (string) $id]);
+            $this->error('No participant found.');
 
             return;
         }
@@ -54,7 +58,8 @@ final class GetParticipantRecordById extends Command
         $encodedRecord = json_encode($record);
 
         if ($encodedRecord === false) {
-            $this->warn('⏭️ Participant '.$id.' could not be hashed. Skipping pdf regeneration.');
+            Log::warning('Participant record could not be hashed.', ['participant_id' => (string) $id]);
+            $this->warn('Participant record could not be hashed. Skipping PDF regeneration.');
 
             return;
         }
@@ -63,17 +68,18 @@ final class GetParticipantRecordById extends Command
 
         // Check if hash already exists
         if (! NeonHash::query()->where('id', $hash)->exists()) {
-            $this->info('🔄 Generating hash....');
+            $this->info('Generating hash.');
             NeonHash::query()->create(['id' => $hash]);
         }
 
-        $this->info('🔄 Transforming participant data to serializable DTO');
+        $this->info('Transforming participant data to serializable DTO');
         // Transform the participant data into serializable DTOs
         $participantData = NeonDTOTransformer::transformParticipantData($record);
 
         // Queue the pdf generation job
-        $this->info('📬 Queing pdf regeneration');
+        $this->info('Queuing PDF regeneration');
         dispatch(new GenerateParticipantPdfJob($participantData));
-        $this->info('✅ Polling complete.');
+        Log::info('Participant PDF generation queued.', ['participant_id' => (string) $id]);
+        $this->info('Participant processing queued.');
     }
 }
