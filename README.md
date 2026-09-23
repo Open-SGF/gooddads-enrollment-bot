@@ -83,7 +83,7 @@ If you are stuck or Laravel is stuck.
 - To also clear local session state during account-switch testing, run `sail artisan dropbox:reset-auth --with-sessions`.
 - Validate the integration with `sail artisan dropbox:test-upload`.
 - Validate token refresh with `sail artisan dropbox:test-upload --expire-token`.
-- Both validation commands upload a probe file into Dropbox under `DROPBOX_UPLOAD_PATH/dropbox-test/` and remove their temporary local probe file afterward.
+- Both validation commands generate probe contents in memory and upload them into Dropbox under `DROPBOX_UPLOAD_PATH/dropbox-test/`, without creating a local file.
 - Run the automated OAuth tests with `sail artisan test tests/Feature/DropboxOAuthTest.php`.
 
 #### Re-authorization note

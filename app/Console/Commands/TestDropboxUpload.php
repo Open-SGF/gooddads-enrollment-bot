@@ -11,7 +11,6 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Throwable;
 
@@ -29,8 +28,6 @@ final class TestDropboxUpload extends Command
 
     public function handle(): int
     {
-        $localRelativePath = null;
-
         Log::info('Starting Dropbox upload validation command.', [
             'expire_token' => (bool) $this->option('expire-token'),
             'remote' => $this->option('remote'),
@@ -55,8 +52,6 @@ final class TestDropboxUpload extends Command
                 Log::info('Forced Dropbox token expiration for upload validation command.');
             }
 
-            $timestamp = Date::now()->format('Y-m-d_H-i-s');
-            $localRelativePath = 'dropbox-test/upload_probe_'.$timestamp.'.txt';
             $remotePath = $this->option('remote');
 
             if (! is_string($remotePath) || $remotePath === '') {
@@ -69,19 +64,13 @@ final class TestDropboxUpload extends Command
                 'Remote path: '.$remotePath,
             ]);
 
-            Storage::put($localRelativePath, $contents);
-
-            $absoluteLocalPath = Storage::path($localRelativePath);
-
-            $metadata = $this->dropboxUploadService->upload($absoluteLocalPath, $remotePath);
+            $metadata = $this->dropboxUploadService->upload($contents, $remotePath);
             $uploadedPath = is_string($metadata['path_display'] ?? null) ? $metadata['path_display'] : $remotePath;
 
             $this->info('Dropbox upload succeeded.');
-            $this->line('Local file: '.$absoluteLocalPath);
             $this->line('Remote path: '.$uploadedPath);
 
             Log::info('Dropbox upload validation command succeeded.', [
-                'local_path' => $absoluteLocalPath,
                 'remote_path' => $uploadedPath,
             ]);
 
@@ -95,13 +84,6 @@ final class TestDropboxUpload extends Command
             ]);
 
             return self::FAILURE;
-        } finally {
-            if (is_string($localRelativePath)) {
-                Storage::delete($localRelativePath);
-                Log::debug('Cleaned up local Dropbox upload validation probe file.', [
-                    'local_relative_path' => $localRelativePath,
-                ]);
-            }
         }
     }
 }

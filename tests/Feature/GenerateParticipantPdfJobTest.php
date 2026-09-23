@@ -17,6 +17,7 @@ use App\Services\PdfIntakeFormService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use mikehaertl\tmp\File;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
@@ -65,14 +66,21 @@ final class GenerateParticipantPdfJobTest extends TestCase
 
         // Stub the PDF tool, not the job, so tests do not need the pdftk executable.
         $pdf = Mockery::mock('overload:mikehaertl\\pdftk\\Pdf');
-        $pdf->shouldReceive('fillForm', 'needAppearances', 'flatten')->andReturnSelf();
-        $pdf->shouldReceive('saveAs')->andReturnUsing(
-            fn (string $path): bool => file_put_contents($path, '%PDF-1.4 test attachment') !== false
-        );
+        $contents = "%PDF-1.4 test document\0\xFF";
+        $tmpFile = new File($contents, '.pdf');
+        $pdf->shouldReceive('fillForm', 'flatten')->andReturnSelf();
+        $pdf->shouldReceive('execute')->andReturnTrue();
+        $pdf->shouldReceive('getTmpFile')->andReturn($tmpFile);
         $pdf->shouldReceive('getError')->andReturn('');
 
         $client = Mockery::mock(Client::class);
-        $client->shouldReceive('upload')->once()->andReturn(['path_display' => '/intake.pdf']);
+        $client->shouldReceive('upload')->once()
+            ->withArgs(fn (string $path, string $bytes, string $mode, bool $autorename): bool => str_contains($path, '/participant-forms/123/Participant_Test_Enrollment_')
+                && str_ends_with($path, '.pdf')
+                && $bytes === $contents
+                && $mode === 'add'
+                && $autorename)
+            ->andReturn(['path_display' => '/intake.pdf']);
 
         $participant = new ParticipantUpdateData(
             id: '123',
@@ -92,7 +100,8 @@ final class GenerateParticipantPdfJobTest extends TestCase
             new DropboxUploadService($client),
         );
 
-        $this->assertCount(1, Storage::files('participant-forms/123'));
+        $this->assertSame([], Storage::allFiles());
+        $this->assertFileDoesNotExist($tmpFile->getFileName());
         $messages = Mail::getSymfonyTransport()->messages();
         $this->assertCount(count($valid), $messages);
 
@@ -101,7 +110,7 @@ final class GenerateParticipantPdfJobTest extends TestCase
             $this->assertSame([$valid[$index]], array_map(fn (Address $address): string => $address->getAddress(), $message->getTo()));
             $this->assertSame([], $message->getCc());
             $this->assertSame([], $message->getBcc());
-            $this->assertCount(1, $message->getAttachments());
+            $this->assertSame([], $message->getAttachments());
         }
 
         foreach ($invalid as $recipient) {
