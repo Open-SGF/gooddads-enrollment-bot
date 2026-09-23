@@ -31,6 +31,7 @@ RUN apt-get update \
         php8.5-intl \
         php8.5-mbstring \
         php8.5-mysql \
+        php8.5-opentelemetry \
         php8.5-redis \
         php8.5-sqlite3 \
         php8.5-xml \
