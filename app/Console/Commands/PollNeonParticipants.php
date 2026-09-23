@@ -73,7 +73,7 @@ final class PollNeonParticipants extends Command
                 'participants' => $count,
                 'duration_ms' => (int) ((hrtime(true) - $fetchStarted) / 1_000_000),
             ]);
-            $this->info(sprintf('Found %d new or updated participant records.', $count));
+            $this->info('Participant records fetched.');
 
             $queued = 0;
             $unchanged = 0;

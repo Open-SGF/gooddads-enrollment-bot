@@ -87,12 +87,13 @@ final readonly class DropboxOAuthService
         try {
             $token = $this->oauthProvider->getAccessToken($grant, $options);
         } catch (Throwable $throwable) {
-            Log::error($failureMessage.'.', [
+            Log::error('Dropbox OAuth token request failed.', [
+                'grant' => $grant,
                 'exception' => $throwable::class,
-                'message' => $throwable->getMessage(),
+                'error_code' => $throwable->getCode() ?: null,
             ]);
 
-            throw new RuntimeException($failureMessage.': '.$throwable->getMessage(), $throwable->getCode(), previous: $throwable);
+            throw new RuntimeException($failureMessage.': '.$throwable->getMessage(), (int) $throwable->getCode(), previous: $throwable);
         }
 
         return $token;

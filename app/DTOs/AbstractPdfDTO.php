@@ -37,7 +37,8 @@ abstract readonly class AbstractPdfDTO implements PdfDTO
         $missing = array_filter($mandatory, fn (string $field): bool => empty($mapped[$field]));
 
         if ($missing !== []) {
-            Log::warning($dtoClass.': missing mandatory fields', [
+            Log::warning('PDF data missing mandatory fields.', [
+                'dto_class' => $dtoClass,
                 'fields' => array_values($missing),
             ]);
         }
