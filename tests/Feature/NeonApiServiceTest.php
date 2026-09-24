@@ -139,6 +139,38 @@ it('loads a single participant record with concurrent section requests', functio
     Http::assertSent(fn (Request $request): bool => neonPath($request) === '/data/persons/42');
 });
 
+it('uses the same fields for bulk and person lookups except for the two ID omissions', function (): void {
+    $requests = [];
+
+    Http::fake(function (Request $request) use (&$requests): array {
+        $requests[(isset($request['page']) ? 'bulk:' : 'person:').neonPath($request)] = [
+            'fields' => json_decode((string) $request['fields'], true),
+            'where' => $request['where'] ?? null,
+        ];
+
+        return neonEnvelope([neonRecord('42')]);
+    });
+
+    $service = resolve(NeonApiService::class);
+    $service->getFullParticipantRecordsByDate('2026-09-22');
+    $service->buildFullParticipantRecord('42');
+
+    foreach (neonTablePaths() as $path) {
+        $bulk = $requests['bulk:'.$path]['fields'];
+        $personPath = $path === '/data/persons' ? '/data/persons/42' : $path;
+        $person = $requests['person:'.$personPath]['fields'];
+
+        expect($person)->toBe(in_array($path, ['/data/persons', '/data/persons_applications_children'], true)
+            ? array_values(array_diff($bulk, ['persons_id']))
+            : $bulk);
+    }
+
+    expect($requests['person:/data/persons/42']['where'])->toBeNull()
+        ->and($requests['person:/data/persons_applications_children']['where'])->toBeString();
+
+    Http::assertSentCount(12);
+});
+
 it('throws when a pooled Neon request fails', function (): void {
     Http::fake(function (Request $request) {
         if (neonPath($request) === '/data/persons') {
