@@ -78,7 +78,7 @@ final class GetParticipantRecordById extends Command
 
         // Queue the pdf generation job
         $this->info('Queuing PDF regeneration');
-        dispatch(new GenerateParticipantPdfJob($participantData));
+        dispatch(new GenerateParticipantPdfJob($participantData, neonDataHash: $hash));
         Log::info('Participant PDF generation queued.', ['participant_id' => $id]);
         $this->info('Participant processing queued.');
     }

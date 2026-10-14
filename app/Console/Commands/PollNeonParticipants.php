@@ -104,7 +104,7 @@ final class PollNeonParticipants extends Command
 
                 NeonHash::query()->create(['id' => $hash]);
                 $participantData = NeonDTOTransformer::transformParticipantData($fullRecord);
-                dispatch(new GenerateParticipantPdfJob($participantData, $pollId));
+                dispatch(new GenerateParticipantPdfJob($participantData, $pollId, $hash));
                 $queued++;
             }
 

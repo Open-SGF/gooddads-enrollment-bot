@@ -1,0 +1,36 @@
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('participant_pdf_histories', function (Blueprint $table): void {
+            $table->string('participant_id')->primary();
+        });
+
+        Schema::create('participant_pdf_versions', function (Blueprint $table): void {
+            $table->id();
+            $table->string('participant_id');
+            $table->unsignedInteger('version');
+            $table->string('neon_data_hash', 64)->nullable();
+            $table->text('field_hashes');
+            $table->json('changed_fields');
+            $table->string('filename');
+            $table->timestamps();
+            $table->unique(['participant_id', 'version']);
+            $table->foreign('participant_id')->references('participant_id')->on('participant_pdf_histories');
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('participant_pdf_versions');
+        Schema::dropIfExists('participant_pdf_histories');
+    }
+};

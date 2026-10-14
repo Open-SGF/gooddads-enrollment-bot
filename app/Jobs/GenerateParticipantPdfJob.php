@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\DTOs\ParticipantUpdateData;
 use App\Mail\IntakeFormMailable;
 use App\Services\DropboxUploadService;
+use App\Services\ParticipantPdfVersionService;
 use App\Services\PdfIntakeFormService;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
@@ -23,14 +24,23 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
 {
     use Queueable;
 
+    // A property default also covers jobs queued before hash metadata was added.
+    public ?string $neonDataHash = null;
+
     public function __construct(
         public readonly ParticipantUpdateData $updatedParticipantData,
         public readonly ?string $pollId = null,
-    ) {}
+        ?string $neonDataHash = null,
+    ) {
+        if ($neonDataHash !== null) {
+            $this->neonDataHash = $neonDataHash;
+        }
+    }
 
     public function handle(
         PdfIntakeFormService $pdfService,
-        DropboxUploadService $dropboxService
+        DropboxUploadService $dropboxService,
+        ParticipantPdfVersionService $versionService,
     ): void {
         $context = [
             'poll_id' => $this->pollId,
@@ -47,7 +57,7 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             $scope = $span->activate();
 
             try {
-                $pdfGenerationResult = $pdfService->generate($this->updatedParticipantData);
+                $pdfGenerationResult = $versionService->generate($this->updatedParticipantData, $pdfService, $this->neonDataHash);
             } catch (Throwable $exception) {
                 $span->recordException($exception);
                 $span->setStatus(StatusCode::STATUS_ERROR);
@@ -103,7 +113,7 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
                 $scope = $span->activate();
 
                 try {
-                    Mail::to($recipient)->send(new IntakeFormMailable($this->updatedParticipantData));
+                    Mail::to($recipient)->send(new IntakeFormMailable($this->updatedParticipantData, $pdfGenerationResult->version));
                     $sent++;
                 } catch (Throwable $exception) {
                     $span->recordException($exception);
