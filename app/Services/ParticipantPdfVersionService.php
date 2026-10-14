@@ -14,9 +14,11 @@ final class ParticipantPdfVersionService
     public function generate(
         ParticipantUpdateData $participant,
         PdfIntakeFormService $pdfService,
-        ?string $neonDataHash,
-    ): PdfGenerationResultDTO {
-        return DB::transaction(function () use ($participant, $pdfService, $neonDataHash): PdfGenerationResultDTO {
+        string $neonDataHash,
+        bool $forceRegeneration = false,
+        ?string $jobUuid = null,
+    ): ?PdfGenerationResultDTO {
+        return DB::transaction(function () use ($participant, $pdfService, $neonDataHash, $forceRegeneration, $jobUuid): ?PdfGenerationResultDTO {
             // Lock one row per participant, including their first generation.
             DB::table('participant_pdf_histories')->upsert(
                 [['participant_id' => $participant->id]],
@@ -29,6 +31,19 @@ final class ParticipantPdfVersionService
                 ->where('participant_id', $participant->id)
                 ->orderByDesc('version')
                 ->first();
+
+            if (! $forceRegeneration && $previous?->neon_data_hash === $neonDataHash) {
+                // Failed-job replay resets the attempt count, but retains the UUID.
+                $retrying = $jobUuid !== null && ParticipantPdfVersion::query()
+                    ->where('participant_id', $participant->id)
+                    ->where('job_uuid', $jobUuid)
+                    ->exists();
+
+                if (! $retrying) {
+                    return null;
+                }
+            }
+
             $number = ($previous->version ?? 0) + 1;
             $fieldHashes = $this->fieldHashes($participant);
             $changedFields = $previous instanceof ParticipantPdfVersion
@@ -40,6 +55,7 @@ final class ParticipantPdfVersionService
                 'participant_id' => $participant->id,
                 'version' => $number,
                 'neon_data_hash' => $neonDataHash,
+                'job_uuid' => $jobUuid,
                 'field_hashes' => $fieldHashes,
                 'changed_fields' => $changedFields,
                 'filename' => $result->filename,

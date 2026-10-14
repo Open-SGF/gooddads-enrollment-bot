@@ -58,8 +58,12 @@ final class ParticipantPdfVersionTest extends TestCase
         $pdf = new PdfIntakeFormService;
         $hash = hash('sha256', 'Neon record');
 
-        $first = $service->generate($this->participant(), $pdf, $hash)->version->fresh();
-        $second = $service->generate($this->participant(), $pdf, $hash)->version->fresh();
+        $jobUuid = '00000000-0000-0000-0000-000000000123';
+        $first = $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid)->version->fresh();
+        $this->assertSame($jobUuid, $first->job_uuid);
+        $this->assertNull($service->generate($this->participant(), $pdf, $hash));
+        $this->assertNull($service->generate($this->participant(), $pdf, $hash, jobUuid: '00000000-0000-0000-0000-000000000456'));
+        $second = $service->generate($this->participant(), $pdf, $hash, forceRegeneration: true)->version->fresh();
         $other = $service->generate($this->participant(id: '456'), $pdf, $hash)->version->fresh();
 
         $this->assertSame([1, 2, 1], [$first->version, $second->version, $other->version]);
@@ -71,20 +75,29 @@ final class ParticipantPdfVersionTest extends TestCase
         $this->assertStringContainsString('_Enrollment_v2_', $second->filename);
         $storedHashes = DB::table('participant_pdf_versions')->where('id', $first->id)->value('field_hashes');
         $this->assertStringNotContainsString($first->field_hashes['email'], $storedHashes);
+
+        // Automatic retries and queue:retry must not skip delivery after generation commits.
+        $retry = $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid)->version->fresh();
+        $this->assertSame(3, $retry->version);
+        $this->assertSame($jobUuid, $retry->job_uuid);
     }
 
     public function test_changed_fields_are_saved_without_overwriting_history(): void
     {
         $service = new ParticipantPdfVersionService;
         $pdf = new PdfIntakeFormService;
-        $first = $service->generate($this->participant(), $pdf, hash('sha256', 'original'))->version;
+        $original = $this->participant();
+        $originalHash = hash('sha256', 'original');
+        $first = $service->generate($original, $pdf, $originalHash)->version;
         $participant = $this->participant(email: 'updated@example.org', children: [new ChildDTO('Alex', '7', '2018-01-01')]);
         $second = $service->generate($participant, $pdf, hash('sha256', 'updated'))->version->fresh();
-        $third = $service->generate($this->participant(email: null), $pdf, hash('sha256', 'removed'))->version->fresh();
+        $third = $service->generate($original, $pdf, $originalHash)->version->fresh();
 
         $changedFields = ['child_age_1', 'child_dob_1', 'child_name_1', 'email'];
         $this->assertSame($changedFields, $second->changed_fields);
         $this->assertSame($changedFields, $third->changed_fields);
+        $this->assertSame(3, $third->version);
+        $this->assertSame($first->neon_data_hash, $third->neon_data_hash);
         $this->assertSame([], $first->fresh()->changed_fields);
         $this->assertSame($first->field_hashes, $first->fresh()->field_hashes);
         $this->assertDatabaseCount('participant_pdf_versions', 3);
@@ -103,7 +116,7 @@ final class ParticipantPdfVersionTest extends TestCase
         $this->pdfShouldFail = true;
 
         try {
-            $service->generate($participant, new PdfIntakeFormService, null);
+            $service->generate($participant, new PdfIntakeFormService, hash('sha256', 'Neon record'));
             $this->fail('Expected PDF generation to fail.');
         } catch (Exception $exception) {
             $this->assertSame('PDF generation failed: Test PDF tool failure', $exception->getMessage());
@@ -111,7 +124,7 @@ final class ParticipantPdfVersionTest extends TestCase
 
         $this->assertDatabaseCount('participant_pdf_versions', 0);
         $this->pdfShouldFail = false;
-        $retry = $service->generate($participant, new PdfIntakeFormService, null);
+        $retry = $service->generate($participant, new PdfIntakeFormService, hash('sha256', 'Neon record'));
         $this->assertSame(1, $retry->version->version);
     }
 

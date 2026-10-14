@@ -32,7 +32,7 @@ Set `MAIL_INTAKE_FORM_RECIPIENTS` to comma-separated email addresses. Leave it e
 
 Each successfully generated PDF gets a version number starting at 1 for that participant. Dropbox filenames include `_v1_`, `_v2_`, and so on. Notification emails include the version, filename, and changed field names.
 
-The `participant_pdf_versions` table stores the original Neon SHA-256 hash, filename, and changed fields for each version. Changes compare the PDF field names returned by `ParticipantUpdateData::toPdfArray()`, plus `firstName` and `lastName`, against the previous generated version. Encrypted field fingerprints detect changed values, added fields, and removed fields without storing their personal values. Fingerprints use Laravel's encrypted cast so a database reader cannot guess low-entropy field values from their hashes. The first version is a baseline with an empty changed-field list.
+Each row in `participant_pdf_versions` stores a required `participant_id`, `version`, and original Neon SHA-256 `neon_data_hash`, alongside the filename and changed fields. The participant/version pair is unique; the hash is not, so a reverted record can reuse an earlier hash in a new version. Changes compare the PDF field names returned by `ParticipantUpdateData::toPdfArray()`, plus `firstName` and `lastName`, against the previous generated version. Encrypted field fingerprints detect changed values, added fields, and removed fields without storing their personal values. Fingerprints use Laravel's encrypted cast so a database reader cannot guess low-entropy field values from their hashes. The first version is a baseline with an empty changed-field list.
 
 Read a participant's history in version order with:
 
@@ -43,9 +43,11 @@ App\Models\ParticipantPdfVersion::query()
     ->get();
 ```
 
-Polling still skips previously seen Neon hashes. Manual regeneration gets a new version even when the hash is unchanged. Generation failures do not consume a version number. A generated PDF remains in history if required fields block delivery or Dropbox/email delivery fails. Retrying a job generates another PDF and therefore another version.
+Polling compares the current Neon hash with only that participant's newest generated version. Matching data is skipped; `A → B → A` produces versions `1 → 2 → 3`. The old `neon_participant_hashes` table no longer controls generation. Queue uniqueness prevents repeated polls from queuing the same participant/hash while its job is pending or running. Workers recheck the latest hash under the participant database lock before generating. All pollers and workers must use the same shared cache store for queue uniqueness.
 
-Existing hash records cannot reconstruct past PDFs or field changes, so historical PDFs are not backfilled. Jobs queued before this change can still run, but their original Neon hash is unknown and stored as null. Deploy the migration before starting workers with the new code.
+Manual regeneration with `neon:fetch-by-id` explicitly forces a new version even when the hash is unchanged. Generation failures do not consume a version number. A generated PDF remains in history if required fields block delivery or Dropbox/email delivery fails. Each version also records its queue job UUID when available. Both automatic retries and failed-job replays with `queue:retry` regenerate for that UUID so a saved version does not prevent a delivery retry.
+
+Existing hash records cannot reconstruct past PDFs or field changes, so historical PDFs are not backfilled. Before deploying this change, stop polling and finish pending jobs and resolve failed jobs from the old code, which lack the required original Neon hash. Then deploy the migration before starting the new workers and resuming polling.
 
 ## Testing and Linting
 
@@ -72,15 +74,15 @@ If you are stuck or Laravel is stuck.
 
 - Run `bash reset-queue.sh` which does the following:
   - Clear configs: `sail artisan config:clear`
-  - Clear cache: `sail artisan cache:clear`
   - Clear routes: `sail artisan route:clear`
   - Regenerate autoloader files: `sail composer dump-autoload`
   - Flush the queue: `sail artisan queue:flush`
   - Clear the queue: `sail artisan queue:clear`
+  - Clear cache: `sail artisan cache:clear`
+  - Clear orphaned database cache locks: `sail artisan cache:clear --locks`
   - Restart the queue: `sail artisan queue:restart`
-  - Clear the hash-table and failed jobs table:
+  - Clear the failed jobs table:
     - Start MySQL terminal: `sail artisan tinker`
-    - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`
     - Clear failed jobs-table: `DB::table('failed_jobs')->truncate();`
     - Exit MySQL terminal: `exit`
   - Reset the laravel log file (RHEL/Almalinux syntax): `> storage/logs/laravel.log`

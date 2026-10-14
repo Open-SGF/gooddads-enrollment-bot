@@ -18,7 +18,8 @@ return new class extends Migration
             $table->id();
             $table->string('participant_id');
             $table->unsignedInteger('version');
-            $table->string('neon_data_hash', 64)->nullable();
+            $table->string('neon_data_hash', 64);
+            $table->uuid('job_uuid')->nullable()->index();
             $table->text('field_hashes');
             $table->json('changed_fields');
             $table->string('filename');

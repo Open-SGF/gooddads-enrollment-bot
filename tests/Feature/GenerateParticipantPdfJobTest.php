@@ -119,6 +119,14 @@ final class GenerateParticipantPdfJobTest extends TestCase
         }
 
         $this->assertCount(count($recipients) - count($invalid), $messages);
+
+        new GenerateParticipantPdfJob($participant, neonDataHash: str_repeat('a', 64))->handle(
+            new PdfIntakeFormService,
+            new DropboxUploadService($client),
+            new ParticipantPdfVersionService,
+        );
+        $this->assertDatabaseCount('participant_pdf_versions', 1);
+        $this->assertCount(count($valid), Mail::getSymfonyTransport()->messages());
     }
 
     private function filledDto(string $class): object

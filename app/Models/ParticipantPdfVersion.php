@@ -16,6 +16,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $participant_id
  * @property int|null $version
  * @property string|null $neon_data_hash
+ * @property string|null $job_uuid
  * @property array<array-key, mixed>|null $field_hashes
  * @property array<array-key, mixed>|null $changed_fields
  * @property string|null $filename
@@ -30,6 +31,7 @@ use Illuminate\Support\Carbon;
  * @method static Builder<static>|ParticipantPdfVersion whereFieldHashes($value)
  * @method static Builder<static>|ParticipantPdfVersion whereFilename($value)
  * @method static Builder<static>|ParticipantPdfVersion whereId($value)
+ * @method static Builder<static>|ParticipantPdfVersion whereJobUuid($value)
  * @method static Builder<static>|ParticipantPdfVersion whereNeonDataHash($value)
  * @method static Builder<static>|ParticipantPdfVersion whereParticipantId($value)
  * @method static Builder<static>|ParticipantPdfVersion whereUpdatedAt($value)
@@ -37,7 +39,7 @@ use Illuminate\Support\Carbon;
  *
  * @mixin Model
  */
-#[Fillable(['participant_id', 'version', 'neon_data_hash', 'field_hashes', 'changed_fields', 'filename'])]
+#[Fillable(['participant_id', 'version', 'neon_data_hash', 'job_uuid', 'field_hashes', 'changed_fields', 'filename'])]
 final class ParticipantPdfVersion extends Model
 {
     /** @use HasFactory<Factory<static>> */
