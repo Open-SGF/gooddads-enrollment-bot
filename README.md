@@ -28,6 +28,25 @@
 
 Set `MAIL_INTAKE_FORM_RECIPIENTS` to comma-separated email addresses. Leave it empty to disable email.
 
+## PDF version history
+
+Each successfully generated PDF gets a version number starting at 1 for that participant. Dropbox filenames include `_v1_`, `_v2_`, and so on. Notification emails include the version, filename, and changed field names.
+
+The `participant_pdf_versions` table stores the original Neon SHA-256 hash, filename, and changed fields for each version. Changes compare the PDF field names returned by `ParticipantUpdateData::toPdfArray()`, plus `firstName` and `lastName`, against the previous generated version. Encrypted field fingerprints detect changed values, added fields, and removed fields without storing their personal values. Fingerprints use Laravel's encrypted cast so a database reader cannot guess low-entropy field values from their hashes. The first version is a baseline with an empty changed-field list.
+
+Read a participant's history in version order with:
+
+```php
+App\Models\ParticipantPdfVersion::query()
+    ->where('participant_id', '123')
+    ->orderBy('version')
+    ->get();
+```
+
+Polling still skips previously seen Neon hashes. Manual regeneration gets a new version even when the hash is unchanged. Generation failures do not consume a version number. A generated PDF remains in history if required fields block delivery or Dropbox/email delivery fails. Retrying a job generates another PDF and therefore another version.
+
+Existing hash records cannot reconstruct past PDFs or field changes, so historical PDFs are not backfilled. Jobs queued before this change can still run, but their original Neon hash is unknown and stored as null. Deploy the migration before starting workers with the new code.
+
 ## Testing and Linting
 
 - Run all checks: `composer test`
