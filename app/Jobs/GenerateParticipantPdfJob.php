@@ -5,36 +5,44 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\DTOs\ParticipantUpdateData;
+use App\DTOs\PdfGenerationResultDTO;
 use App\Mail\IntakeFormMailable;
 use App\Services\DropboxUploadService;
 use App\Services\ParticipantPdfVersionService;
 use App\Services\PdfIntakeFormService;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\Span;
 use OpenTelemetry\API\Trace\StatusCode;
 use Throwable;
 
-final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
+final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldBeUnique, ShouldQueue
 {
     use Queueable;
 
-    // A property default also covers jobs queued before hash metadata was added.
-    public ?string $neonDataHash = null;
+    private string $regenerationId = '';
 
     public function __construct(
         public readonly ParticipantUpdateData $updatedParticipantData,
+        public readonly string $neonDataHash,
         public readonly ?string $pollId = null,
-        ?string $neonDataHash = null,
+        public readonly bool $forceRegeneration = false,
     ) {
-        if ($neonDataHash !== null) {
-            $this->neonDataHash = $neonDataHash;
+        if ($forceRegeneration) {
+            $this->regenerationId = (string) Str::uuid();
         }
+    }
+
+    public function uniqueId(): string
+    {
+        return $this->updatedParticipantData->id.':'.($this->forceRegeneration ? $this->regenerationId : $this->neonDataHash);
     }
 
     public function handle(
@@ -57,7 +65,13 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             $scope = $span->activate();
 
             try {
-                $pdfGenerationResult = $versionService->generate($this->updatedParticipantData, $pdfService, $this->neonDataHash);
+                $pdfGenerationResult = $versionService->generate(
+                    $this->updatedParticipantData,
+                    $pdfService,
+                    $this->neonDataHash,
+                    forceRegeneration: $this->forceRegeneration,
+                    jobUuid: $this->job?->uuid(),
+                );
             } catch (Throwable $exception) {
                 $span->recordException($exception);
                 $span->setStatus(StatusCode::STATUS_ERROR);
@@ -66,6 +80,12 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldQueue
             } finally {
                 $scope->detach();
                 $span->end();
+            }
+
+            if (! $pdfGenerationResult instanceof PdfGenerationResultDTO) {
+                Log::info('Participant PDF skipped because the latest version has the same Neon hash.', $context);
+
+                return;
             }
 
             $stage = 'participant.validate';

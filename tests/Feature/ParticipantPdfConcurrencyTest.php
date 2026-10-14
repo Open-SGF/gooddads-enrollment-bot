@@ -42,7 +42,7 @@ final class ParticipantPdfConcurrencyTest extends TestCase
         parent::tearDown();
     }
 
-    public function test_concurrent_generations_get_distinct_sequential_versions(): void
+    public function test_concurrent_unchanged_generations_create_only_one_version(): void
     {
         if (! function_exists('pcntl_fork') || DB::connection()->getDriverName() !== 'mysql') {
             $this->markTestSkipped('This lock regression test requires MySQL and pcntl.');
@@ -65,8 +65,6 @@ final class ParticipantPdfConcurrencyTest extends TestCase
         ];
         $participant = NeonDTOTransformer::transformParticipantData($record);
         $hash = hash('sha256', json_encode($record, JSON_THROW_ON_ERROR));
-
-        DB::table('participant_pdf_histories')->insert(['participant_id' => '123']);
 
         DB::disconnect();
         $children = [];
@@ -96,7 +94,6 @@ final class ParticipantPdfConcurrencyTest extends TestCase
 
         $this->assertSame([0, 0, 0, 0], $exitCodes);
         $versions = ParticipantPdfVersion::query()->where('participant_id', '123')->orderBy('version')->get();
-        $this->assertSame([1, 2, 3, 4], $versions->pluck('version')->all());
-        $this->assertCount(4, $versions->pluck('filename')->unique());
+        $this->assertSame([1], $versions->pluck('version')->all());
     }
 }

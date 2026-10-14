@@ -4,9 +4,8 @@ set -e
 
 SAIL="./vendor/bin/sail"
 
-echo "🧹 Clearing config, cache and routes..."
+echo "🧹 Clearing config and routes..."
 $SAIL artisan config:clear
-$SAIL artisan cache:clear
 $SAIL artisan route:clear
 
 echo "🔄 Regenerating autoloader..."
@@ -15,10 +14,12 @@ $SAIL composer dump-autoload
 echo "🗑️  Flushing and clearing queue..."
 $SAIL artisan queue:flush
 $SAIL artisan queue:clear
+$SAIL artisan cache:clear
+$SAIL artisan cache:clear --locks
 $SAIL artisan queue:restart
 
-echo "🗄️  Truncating hash and failed jobs tables..."
-$SAIL artisan tinker --execute="DB::table('neon_participant_hashes')->truncate(); DB::table('failed_jobs')->truncate();"
+echo "🗄️  Truncating failed jobs table..."
+$SAIL artisan tinker --execute="DB::table('failed_jobs')->truncate();"
 
 echo "📋 Resetting log file..."
 > storage/logs/laravel.log
