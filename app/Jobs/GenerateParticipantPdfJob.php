@@ -17,7 +17,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Str;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\Span;
 use OpenTelemetry\API\Trace\StatusCode;
@@ -27,22 +26,15 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldBeUniq
 {
     use Queueable;
 
-    private string $regenerationId = '';
-
     public function __construct(
         public readonly ParticipantUpdateData $updatedParticipantData,
         public readonly string $neonDataHash,
         public readonly ?string $pollId = null,
-        public readonly bool $forceRegeneration = false,
-    ) {
-        if ($forceRegeneration) {
-            $this->regenerationId = (string) Str::uuid();
-        }
-    }
+    ) {}
 
     public function uniqueId(): string
     {
-        return $this->updatedParticipantData->id.':'.($this->forceRegeneration ? $this->regenerationId : $this->neonDataHash);
+        return $this->updatedParticipantData->id.':'.$this->neonDataHash;
     }
 
     public function handle(
@@ -69,7 +61,6 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldBeUniq
                     $this->updatedParticipantData,
                     $pdfService,
                     $this->neonDataHash,
-                    forceRegeneration: $this->forceRegeneration,
                     jobUuid: $this->job?->uuid(),
                 );
             } catch (Throwable $exception) {

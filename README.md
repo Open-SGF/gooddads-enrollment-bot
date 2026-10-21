@@ -32,7 +32,9 @@ Set `MAIL_INTAKE_FORM_RECIPIENTS` to comma-separated email addresses. Leave it e
 
 Each successfully generated PDF gets a version number starting at 1 for that participant. Dropbox filenames include `_v1_`, `_v2_`, and so on. Notification emails include the version, filename, and changed field names.
 
-Each row in `participant_pdf_versions` stores a required `participant_id`, `version`, and original Neon SHA-256 `neon_data_hash`, alongside the filename and changed fields. The participant/version pair is unique; the hash is not, so a reverted record can reuse an earlier hash in a new version. Changes compare the PDF field names returned by `ParticipantUpdateData::toPdfArray()`, plus `firstName` and `lastName`, against the previous generated version. Encrypted field fingerprints detect changed values, added fields, and removed fields without storing their personal values. Fingerprints use Laravel's encrypted cast so a database reader cannot guess low-entropy field values from their hashes. The first version is a baseline with an empty changed-field list.
+The `participants` table stores each participant's Neon ID and one current set of encrypted `field_hashes`. Its row also provides the database lock for generation. Each row in `participant_pdf_versions` stores the participant ID, version number, original Neon SHA-256 hash, filename, changed field names, and queue job UUID. Only the participant/version pair is unique; the same hash can appear in multiple versions.
+
+Field changes compare the incoming PDF fields from `ParticipantUpdateData::toPdfArray()`, plus `firstName` and `lastName`, with the participant's saved fingerprints. After successful generation, the new fingerprints replace the previous set in the same transaction that saves the version. Historical versions keep their changed-field lists, not copies of the fingerprints or personal values. The first version is a baseline with an empty changed-field list.
 
 Read a participant's history in version order with:
 
@@ -43,11 +45,11 @@ App\Models\ParticipantPdfVersion::query()
     ->get();
 ```
 
-Polling compares the current Neon hash with only that participant's newest generated version. Matching data is skipped; `A → B → A` produces versions `1 → 2 → 3`. The old `neon_participant_hashes` table no longer controls generation. Queue uniqueness prevents repeated polls from queuing the same participant/hash while its job is pending or running. Workers recheck the latest hash under the participant database lock before generating. All pollers and workers must use the same shared cache store for queue uniqueness.
+Polling and manual fetches with `neon:fetch-by-id` use the same hash comparison. Matching the newest generated version is skipped; `A → B → A` produces versions `1 → 2 → 3`. Queue uniqueness deduplicates pending participant/hash jobs, and workers recheck the latest hash under the participant lock. Pollers and workers must share the same cache store.
 
-Manual regeneration with `neon:fetch-by-id` explicitly forces a new version even when the hash is unchanged. Generation failures do not consume a version number. A generated PDF remains in history if required fields block delivery or Dropbox/email delivery fails. Each version also records its queue job UUID when available. Both automatic retries and failed-job replays with `queue:retry` regenerate for that UUID so a saved version does not prevent a delivery retry.
+Generation failures leave the version history and participant fingerprints unchanged. Delivery happens after generation commits, so missing fields or Dropbox/email failures do not remove a generated version. Retrying the job that generated the latest version creates another PDF version and retries delivery even if the hash is unchanged.
 
-Existing hash records cannot reconstruct past PDFs or field changes, so historical PDFs are not backfilled. Before deploying this change, stop polling and finish pending jobs and resolve failed jobs from the old code, which lack the required original Neon hash. Then deploy the migration before starting the new workers and resuming polling.
+The migration drops the obsolete `neon_participant_hashes` table. Its records cannot reconstruct previous PDFs or field changes, so tracking starts at version 1 without a historical backfill. Before deploying, stop polling and finish pending jobs and resolve failed jobs from the old code, which lack the original Neon hash. Apply the migration before starting new workers and resuming polling.
 
 ## Testing and Linting
 

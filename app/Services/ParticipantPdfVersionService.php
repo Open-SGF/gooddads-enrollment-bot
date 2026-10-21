@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\DTOs\ParticipantUpdateData;
 use App\DTOs\PdfGenerationResultDTO;
+use App\Models\Participant;
 use App\Models\ParticipantPdfVersion;
 use Illuminate\Support\Facades\DB;
 
@@ -15,39 +16,24 @@ final class ParticipantPdfVersionService
         ParticipantUpdateData $participant,
         PdfIntakeFormService $pdfService,
         string $neonDataHash,
-        bool $forceRegeneration = false,
         ?string $jobUuid = null,
     ): ?PdfGenerationResultDTO {
-        return DB::transaction(function () use ($participant, $pdfService, $neonDataHash, $forceRegeneration, $jobUuid): ?PdfGenerationResultDTO {
+        return DB::transaction(function () use ($participant, $pdfService, $neonDataHash, $jobUuid): ?PdfGenerationResultDTO {
             // Lock one row per participant, including their first generation.
-            DB::table('participant_pdf_histories')->upsert(
-                [['participant_id' => $participant->id]],
-                ['participant_id'],
-                ['participant_id'],
-            );
-            DB::table('participant_pdf_histories')->where('participant_id', $participant->id)->lockForUpdate()->first();
+            DB::table('participants')->upsert([['id' => $participant->id]], ['id'], ['id']);
+            $storedParticipant = Participant::query()->whereKey($participant->id)->lockForUpdate()->firstOrFail();
+            $previous = $storedParticipant->pdfVersions()->orderByDesc('version')->first();
 
-            $previous = ParticipantPdfVersion::query()
-                ->where('participant_id', $participant->id)
-                ->orderByDesc('version')
-                ->first();
-
-            if (! $forceRegeneration && $previous?->neon_data_hash === $neonDataHash) {
-                // Failed-job replay resets the attempt count, but retains the UUID.
-                $retrying = $jobUuid !== null && ParticipantPdfVersion::query()
-                    ->where('participant_id', $participant->id)
-                    ->where('job_uuid', $jobUuid)
-                    ->exists();
-
-                if (! $retrying) {
-                    return null;
-                }
+            // Retry delivery for the job that generated the latest PDF, even if its hash matches.
+            $retrying = $jobUuid !== null && $previous?->job_uuid === $jobUuid;
+            if ($previous?->neon_data_hash === $neonDataHash && ! $retrying) {
+                return null;
             }
 
             $number = ($previous->version ?? 0) + 1;
             $fieldHashes = $this->fieldHashes($participant);
             $changedFields = $previous instanceof ParticipantPdfVersion
-                ? $this->changedFields($previous->fieldHashes(), $fieldHashes)
+                ? $this->changedFields($storedParticipant->fieldHashes(), $fieldHashes)
                 : [];
 
             $result = $pdfService->generate($participant, $number);
@@ -56,10 +42,11 @@ final class ParticipantPdfVersionService
                 'version' => $number,
                 'neon_data_hash' => $neonDataHash,
                 'job_uuid' => $jobUuid,
-                'field_hashes' => $fieldHashes,
                 'changed_fields' => $changedFields,
                 'filename' => $result->filename,
             ]);
+
+            $storedParticipant->update(['field_hashes' => $fieldHashes]);
 
             return $result;
         }, attempts: 3);
