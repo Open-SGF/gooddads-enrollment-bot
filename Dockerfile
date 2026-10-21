@@ -2,6 +2,9 @@
 
 FROM ubuntu:24.04 AS runtime
 
+# PHP2Shell fixes require PHP 8.5.12 or newer.
+ARG PHP_MIN_VERSION=8.5.12
+
 LABEL org.opencontainers.image.authors="Open SGF"
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -37,6 +40,7 @@ RUN apt-get update \
         php8.5-xml \
         php8.5-zip \
         supervisor \
+    && php -r 'exit(version_compare(PHP_VERSION, $argv[1], ">=") ? 0 : 1);' "$PHP_MIN_VERSION" \
     && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 

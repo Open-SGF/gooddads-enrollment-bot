@@ -2,6 +2,8 @@ FROM ubuntu:24.04
 
 LABEL maintainer="Taylor Otwell"
 
+# PHP2Shell fixes require PHP 8.5.12 or newer.
+ARG PHP_MIN_VERSION=8.5.12
 ARG WWWGROUP
 ARG NODE_VERSION=24
 ARG MYSQL_CLIENT="mysql-client"
@@ -56,6 +58,7 @@ RUN apt-get update && apt-get upgrade -y \
         php8.5-pcov \
         php8.5-imagick \
         php8.5-xdebug \
+    && php -r 'exit(version_compare(PHP_VERSION, $argv[1], ">=") ? 0 : 1);' "$PHP_MIN_VERSION" \
     && curl -sLS https://getcomposer.org/installer | php -- --install-dir=/usr/bin/ --filename=composer \
     && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
     && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_VERSION.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
