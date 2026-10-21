@@ -28,6 +28,29 @@
 
 Set `MAIL_INTAKE_FORM_RECIPIENTS` to comma-separated email addresses. Leave it empty to disable email.
 
+## PDF version history
+
+Each successfully generated PDF gets a version number starting at 1 for that participant. Dropbox filenames include `_v1_`, `_v2_`, and so on. Notification emails include the version, filename, and changed field names.
+
+The `participants` table stores each participant's Neon ID and one current set of encrypted `field_hashes`. Its row also provides the database lock for generation. Each row in `participant_pdf_versions` stores the participant ID, version number, original Neon SHA-256 hash, filename, changed field names, and queue job UUID. Only the participant/version pair is unique; the same hash can appear in multiple versions.
+
+Field changes compare the incoming PDF fields from `ParticipantUpdateData::toPdfArray()`, plus `firstName` and `lastName`, with the participant's saved fingerprints. After successful generation, the new fingerprints replace the previous set in the same transaction that saves the version. Historical versions keep their changed-field lists, not copies of the fingerprints or personal values. The first version is a baseline with an empty changed-field list.
+
+Read a participant's history in version order with:
+
+```php
+App\Models\ParticipantPdfVersion::query()
+    ->where('participant_id', '123')
+    ->orderBy('version')
+    ->get();
+```
+
+Polling and manual fetches with `neon:fetch-by-id` use the same hash comparison. Matching the newest generated version is skipped; `A → B → A` produces versions `1 → 2 → 3`. Queue uniqueness deduplicates pending participant/hash jobs, and workers recheck the latest hash under the participant lock. Pollers and workers must share the same cache store.
+
+Generation failures leave the version history and participant fingerprints unchanged. Delivery happens after generation commits, so missing fields or Dropbox/email failures do not remove a generated version. Retrying the job that generated the latest version creates another PDF version and retries delivery even if the hash is unchanged.
+
+The migration drops the obsolete `neon_participant_hashes` table. Its records cannot reconstruct previous PDFs or field changes, so tracking starts at version 1 without a historical backfill. Before deploying, stop polling and finish pending jobs and resolve failed jobs from the old code, which lack the original Neon hash. Apply the migration before starting new workers and resuming polling.
+
 ## Testing and Linting
 
 - Run all checks: `composer test`
@@ -53,15 +76,15 @@ If you are stuck or Laravel is stuck.
 
 - Run `bash reset-queue.sh` which does the following:
   - Clear configs: `sail artisan config:clear`
-  - Clear cache: `sail artisan cache:clear`
   - Clear routes: `sail artisan route:clear`
   - Regenerate autoloader files: `sail composer dump-autoload`
   - Flush the queue: `sail artisan queue:flush`
   - Clear the queue: `sail artisan queue:clear`
+  - Clear cache: `sail artisan cache:clear`
+  - Clear orphaned database cache locks: `sail artisan cache:clear --locks`
   - Restart the queue: `sail artisan queue:restart`
-  - Clear the hash-table and failed jobs table:
+  - Clear the failed jobs table:
     - Start MySQL terminal: `sail artisan tinker`
-    - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`
     - Clear failed jobs-table: `DB::table('failed_jobs')->truncate();`
     - Exit MySQL terminal: `exit`
   - Reset the laravel log file (RHEL/Almalinux syntax): `> storage/logs/laravel.log`

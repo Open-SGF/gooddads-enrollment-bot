@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Jobs\GenerateParticipantPdfJob;
-use App\Models\NeonHash;
 use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
 use Illuminate\Console\Attributes\Description;
@@ -59,26 +58,20 @@ final class GetParticipantRecordById extends Command
 
         if ($encodedRecord === false) {
             Log::warning('Participant record could not be hashed.', ['participant_id' => (string) $id]);
-            $this->warn('Participant record could not be hashed. Skipping PDF regeneration.');
+            $this->warn('Participant record could not be hashed. Skipping PDF generation.');
 
             return;
         }
 
         $hash = hash('sha256', $encodedRecord);
 
-        // Check if hash already exists
-        if (! NeonHash::query()->where('id', $hash)->exists()) {
-            $this->info('Generating hash.');
-            NeonHash::query()->create(['id' => $hash]);
-        }
-
         $this->info('Transforming participant data to serializable DTO');
         // Transform the participant data into serializable DTOs
         $participantData = NeonDTOTransformer::transformParticipantData($record);
 
         // Queue the pdf generation job
-        $this->info('Queuing PDF regeneration');
-        dispatch(new GenerateParticipantPdfJob($participantData));
+        $this->info('Queuing PDF generation');
+        dispatch(new GenerateParticipantPdfJob($participantData, $hash));
         Log::info('Participant PDF generation queued.', ['participant_id' => (string) $id]);
         $this->info('Participant processing queued.');
     }

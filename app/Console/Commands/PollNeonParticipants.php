@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Jobs\GenerateParticipantPdfJob;
-use App\Models\NeonHash;
+use App\Models\ParticipantPdfVersion;
 use App\Services\NeonApiService;
 use App\Transformers\NeonDTOTransformer;
 use Illuminate\Console\Attributes\Description;
@@ -94,15 +94,19 @@ final class PollNeonParticipants extends Command
 
                 $hash = hash('sha256', $encodedRecord);
 
-                if (NeonHash::query()->where('id', $hash)->exists()) {
+                $latestVersion = ParticipantPdfVersion::query()
+                    ->where('participant_id', (string) $participantId)
+                    ->orderByDesc('version')
+                    ->first();
+
+                if ($latestVersion?->neon_data_hash === $hash) {
                     $unchanged++;
 
                     continue;
                 }
 
-                NeonHash::query()->create(['id' => $hash]);
                 $participantData = NeonDTOTransformer::transformParticipantData($fullRecord);
-                dispatch(new GenerateParticipantPdfJob($participantData, $pollId));
+                dispatch(new GenerateParticipantPdfJob($participantData, $hash, $pollId));
                 $queued++;
             }
 

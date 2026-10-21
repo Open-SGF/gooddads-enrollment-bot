@@ -15,12 +15,13 @@ final class PdfIntakeFormService
 {
     private string $pdfTemplatePath = 'intake-form/Enrollment_Form_Fillable_2026-01-27.pdf';
 
-    public function generate(ParticipantUpdateData $participant): PdfGenerationResultDTO
+    public function generate(ParticipantUpdateData $participant, ?int $version = null): PdfGenerationResultDTO
     {
 
         // Build file name structure for each participant
         $timestamp = Date::now()->format('Y-m-d_H-i-s');
-        $filename = Str::of($participant->lastName)->slug('_')->ucfirst().'_'.Str::of($participant->firstName)->slug('_')->ucfirst().'_Enrollment_'.$timestamp.'.pdf';
+        $versionSuffix = $version !== null ? '_v'.$version : '';
+        $filename = Str::of($participant->lastName)->slug('_')->ucfirst().'_'.Str::of($participant->firstName)->slug('_')->ucfirst().'_Enrollment'.$versionSuffix.'_'.$timestamp.'.pdf';
 
         // Load and fill the PDF
         $data = $participant->toPdfArray();

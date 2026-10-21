@@ -13,7 +13,9 @@ use App\DTOs\ServicePlanDTO;
 use App\DTOs\SurveyDTO;
 use App\Jobs\GenerateParticipantPdfJob;
 use App\Services\DropboxUploadService;
+use App\Services\ParticipantPdfVersionService;
 use App\Services\PdfIntakeFormService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use mikehaertl\tmp\File;
@@ -28,6 +30,8 @@ use Tests\TestCase;
 
 final class GenerateParticipantPdfJobTest extends TestCase
 {
+    use RefreshDatabase;
+
     public static function setUpBeforeClass(): void
     {
         parent::setUpBeforeClass();
@@ -73,7 +77,7 @@ final class GenerateParticipantPdfJobTest extends TestCase
 
         $client = Mockery::mock(Client::class);
         $client->shouldReceive('upload')->once()
-            ->withArgs(fn (string $path, string $bytes, string $mode, bool $autorename): bool => str_contains($path, '/participant-forms/123/Participant_Test_Enrollment_')
+            ->withArgs(fn (string $path, string $bytes, string $mode, bool $autorename): bool => str_contains($path, '/participant-forms/123/Participant_Test_Enrollment_v1_')
                 && str_ends_with($path, '.pdf')
                 && $bytes === $contents
                 && $mode === 'add'
@@ -93,9 +97,10 @@ final class GenerateParticipantPdfJobTest extends TestCase
         );
         $this->assertFalse($participant->hasMissingFields());
 
-        new GenerateParticipantPdfJob($participant)->handle(
+        new GenerateParticipantPdfJob($participant, neonDataHash: str_repeat('a', 64))->handle(
             new PdfIntakeFormService,
             new DropboxUploadService($client),
+            new ParticipantPdfVersionService,
         );
 
         $this->assertSame([], Storage::allFiles());
@@ -109,9 +114,19 @@ final class GenerateParticipantPdfJobTest extends TestCase
             $this->assertSame([], $message->getCc());
             $this->assertSame([], $message->getBcc());
             $this->assertSame([], $message->getAttachments());
+            $this->assertSame('Intake Form for Test Participant (v1)', $message->getSubject());
+            $this->assertStringContainsString('PDF version: 1', $message->getHtmlBody());
         }
 
         $this->assertCount(count($recipients) - count($invalid), $messages);
+
+        new GenerateParticipantPdfJob($participant, neonDataHash: str_repeat('a', 64))->handle(
+            new PdfIntakeFormService,
+            new DropboxUploadService($client),
+            new ParticipantPdfVersionService,
+        );
+        $this->assertDatabaseCount('participant_pdf_versions', 1);
+        $this->assertCount(count($valid), Mail::getSymfonyTransport()->messages());
     }
 
     private function filledDto(string $class): object

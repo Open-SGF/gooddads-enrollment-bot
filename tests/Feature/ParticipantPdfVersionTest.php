@@ -1,0 +1,182 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Feature;
+
+use App\DTOs\AssessmentDTO;
+use App\DTOs\ChildDTO;
+use App\DTOs\ContactInfoDTO;
+use App\DTOs\DisclosureDTO;
+use App\DTOs\ParticipantUpdateData;
+use App\DTOs\ServicePlanDTO;
+use App\DTOs\SurveyDTO;
+use App\Mail\IntakeFormMailable;
+use App\Models\Participant;
+use App\Services\ParticipantPdfVersionService;
+use App\Services\PdfIntakeFormService;
+use Exception;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use mikehaertl\tmp\File;
+use Mockery;
+use PHPUnit\Framework\Attributes\PreserveGlobalState;
+use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use Tests\TestCase;
+
+#[RunTestsInSeparateProcesses]
+#[PreserveGlobalState(false)]
+final class ParticipantPdfVersionTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private bool $pdfShouldFail = false;
+
+    public static function setUpBeforeClass(): void
+    {
+        parent::setUpBeforeClass();
+
+        // Pest does not set the autoloader path needed by PHPUnit's isolated processes.
+        if (! defined('PHPUNIT_COMPOSER_INSTALL')) {
+            define('PHPUNIT_COMPOSER_INSTALL', dirname(__DIR__, 2).'/vendor/autoload.php');
+        }
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $pdf = Mockery::mock('overload:mikehaertl\\pdftk\\Pdf');
+        $pdf->shouldReceive('fillForm', 'flatten')->andReturnSelf();
+        $pdf->shouldReceive('execute')->andReturnUsing(fn (): bool => ! $this->pdfShouldFail);
+        $pdf->shouldReceive('getTmpFile')->andReturnUsing(fn (): File => new File('%PDF-1.4 version test', '.pdf'));
+        $pdf->shouldReceive('getError')->andReturn('Test PDF tool failure');
+    }
+
+    public function test_versions_store_the_source_hash_and_skip_unchanged_data(): void
+    {
+        $service = new ParticipantPdfVersionService;
+        $pdf = new PdfIntakeFormService;
+        $hash = hash('sha256', 'Neon record');
+
+        $first = $service->generate($this->participant(), $pdf, $hash)->version;
+        $this->assertNull($service->generate($this->participant(), $pdf, $hash));
+        $other = $service->generate($this->participant(id: '456'), $pdf, $hash)->version;
+
+        $this->assertSame([1, 1], [$first->version, $other->version]);
+        $this->assertSame($hash, $first->neon_data_hash);
+        $this->assertSame([], $first->changed_fields);
+        $this->assertStringContainsString('_Enrollment_v1_', $first->filename);
+        $this->assertDatabaseCount('participants', 2);
+        $this->assertDatabaseCount('participant_pdf_versions', 2);
+        $this->assertFalse(Schema::hasTable('neon_participant_hashes'));
+        $this->assertFalse(Schema::hasColumn('participant_pdf_versions', 'field_hashes'));
+
+        $participant = Participant::query()->findOrFail('123');
+        $storedHashes = DB::table('participants')->where('id', '123')->value('field_hashes');
+        $this->assertNotEmpty($participant->fieldHashes());
+        $this->assertStringNotContainsString($participant->fieldHashes()['email'], $storedHashes);
+    }
+
+    public function test_changes_and_reversions_create_versions_and_replace_only_the_current_field_hashes(): void
+    {
+        $service = new ParticipantPdfVersionService;
+        $pdf = new PdfIntakeFormService;
+        $original = $this->participant();
+        $originalHash = hash('sha256', 'original');
+        $first = $service->generate($original, $pdf, $originalHash)->version;
+        $originalFieldHashes = Participant::query()->findOrFail('123')->fieldHashes();
+
+        $participant = $this->participant(email: 'updated@example.org', children: [new ChildDTO('Alex', '7', '2018-01-01')]);
+        $second = $service->generate($participant, $pdf, hash('sha256', 'updated'))->version;
+        $this->assertNotSame($originalFieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
+        $third = $service->generate($original, $pdf, $originalHash)->version;
+
+        $changedFields = ['child_age_1', 'child_dob_1', 'child_name_1', 'email'];
+        $this->assertSame([1, 2, 3], [$first->version, $second->version, $third->version]);
+        $this->assertSame($changedFields, $second->fresh()->changed_fields);
+        $this->assertSame($changedFields, $third->changed_fields);
+        $this->assertSame($first->neon_data_hash, $third->neon_data_hash);
+        $this->assertSame([], $first->fresh()->changed_fields);
+        $this->assertSame($originalFieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
+        $this->assertDatabaseCount('participants', 1);
+        $this->assertDatabaseCount('participant_pdf_versions', 3);
+
+        $mail = new IntakeFormMailable($participant, $second);
+        $mail->assertHasSubject('Intake Form for Test Participant (v2)');
+        $mail->assertSeeInHtml('PDF version: 2');
+        $mail->assertSeeInHtml($second->filename);
+        $mail->assertSeeInHtml('<li>email</li>', escape: false);
+    }
+
+    public function test_failed_generation_preserves_the_previous_version_and_field_hashes(): void
+    {
+        $service = new ParticipantPdfVersionService;
+        $pdf = new PdfIntakeFormService;
+        $service->generate($this->participant(), $pdf, hash('sha256', 'original'));
+        $fieldHashes = Participant::query()->findOrFail('123')->fieldHashes();
+        $updated = $this->participant(email: 'updated@example.org');
+        $hash = hash('sha256', 'updated');
+        $this->pdfShouldFail = true;
+
+        try {
+            $service->generate($updated, $pdf, $hash);
+            $this->fail('Expected PDF generation to fail.');
+        } catch (Exception $exception) {
+            $this->assertSame('PDF generation failed: Test PDF tool failure', $exception->getMessage());
+        }
+
+        $this->assertDatabaseCount('participant_pdf_versions', 1);
+        $this->assertSame($fieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
+        $this->pdfShouldFail = false;
+        $retry = $service->generate($updated, $pdf, $hash)->version;
+        $this->assertSame(2, $retry->version);
+        $this->assertSame(['email'], $retry->changed_fields);
+    }
+
+    public function test_the_same_queue_job_can_retry_delivery_after_generation_commits(): void
+    {
+        $service = new ParticipantPdfVersionService;
+        $pdf = new PdfIntakeFormService;
+        $hash = hash('sha256', 'Neon record');
+        $jobUuid = '00000000-0000-0000-0000-000000000123';
+
+        $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid);
+        $retry = $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid)->version;
+
+        $this->assertSame(2, $retry->version);
+        $this->assertSame($jobUuid, $retry->job_uuid);
+        $this->assertSame([], $retry->changed_fields);
+        $this->assertNull($service->generate($this->participant(), $pdf, $hash));
+    }
+
+    /** @param list<ChildDTO> $children */
+    private function participant(string $id = '123', ?string $email = 'first@example.org', array $children = []): ParticipantUpdateData
+    {
+        return new ParticipantUpdateData(
+            id: $id,
+            firstName: 'Test',
+            lastName: 'Participant',
+            contactInfo: new ContactInfoDTO(email: $email),
+            children: $children,
+            disclosure: new DisclosureDTO,
+            assessment: new AssessmentDTO(
+                fullName: 'Test Participant',
+                dob: '',
+                eligibilityMissouriResident: '',
+                eligibilityChildUnder18: '',
+                financialEligibility: '',
+                financialDriversLicence: '',
+                financialUtilityBill: '',
+                financialWrittenEmployerStatement: '',
+                financialSsBenefitsStatement: '',
+                financialNoEmploymentIncome: '',
+                financialUnemploymentCompensation: '',
+                financialOther: '',
+            ),
+            survey: new SurveyDTO,
+            servicePlan: new ServicePlanDTO,
+        );
+    }
+}
