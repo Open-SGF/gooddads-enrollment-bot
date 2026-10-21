@@ -86,7 +86,7 @@ final readonly class RedactedSpanData implements SpanDataInterface
      * @param  Closure(AttributesInterface): AttributesInterface  $attributes
      * @param  Closure(string): string  $redact
      */
-    // @phpstan-ignore missingType.iterableValue, missingType.iterableValue (SDK interface extends Traversable without a value type)
+    // @phpstan-ignore missingType.iterableValue (SDK interface extends Traversable without a value type)
     public function __construct(private SpanDataInterface $span, private Closure $attributes, private Closure $redact) {}
 
     public function getName(): string

@@ -29,6 +29,12 @@ final class TestParticipantRecord extends Command
     {
         $id = $this->argument('id');
 
+        if (! is_string($id) || ! is_numeric($id)) {
+            $this->error('Invalid participant ID.');
+
+            return self::FAILURE;
+        }
+
         $this->info('Testing buildParticipantRecord() for ID: '.$id);
         $this->newLine();
 

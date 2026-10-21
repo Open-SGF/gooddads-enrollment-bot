@@ -475,10 +475,6 @@ final readonly class NeonApiService
             $page = 1;
             /** @var list<NeonRecord> $allRecords */
             $allRecords = [];
-            /** @var NeonEnvelope $data */
-            $data = ['records' => []];
-            /** @var list<NeonRecord> $records */
-            $records = [];
 
             do {
                 $params = [

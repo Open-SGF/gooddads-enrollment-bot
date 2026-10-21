@@ -32,14 +32,14 @@ final class GetParticipantRecordById extends Command
     {
         $id = $this->argument('id');
 
-        if (! is_numeric($id)) {
-            Log::warning('Invalid participant ID.', ['participant_id' => (string) $id]);
+        if (! is_string($id) || ! is_numeric($id)) {
+            Log::warning('Invalid participant ID.');
             $this->error('Invalid participant ID.');
 
             return;
         }
 
-        Log::info('Neon participant fetch started.', ['participant_id' => (string) $id]);
+        Log::info('Neon participant fetch started.', ['participant_id' => $id]);
         $this->info('Collecting participant records.');
         $record = $this->neonApi->buildFullParticipantRecord($id);
 
@@ -48,7 +48,7 @@ final class GetParticipantRecordById extends Command
 
         // Filter out any empty arrays. If the result is empty, ALL records are empty.
         if (array_filter($allExtractedRecords) === []) {
-            Log::warning('Neon participant not found.', ['participant_id' => (string) $id]);
+            Log::warning('Neon participant not found.', ['participant_id' => $id]);
             $this->error('No participant found.');
 
             return;
@@ -58,7 +58,7 @@ final class GetParticipantRecordById extends Command
         $encodedRecord = json_encode($record);
 
         if ($encodedRecord === false) {
-            Log::warning('Participant record could not be hashed.', ['participant_id' => (string) $id]);
+            Log::warning('Participant record could not be hashed.', ['participant_id' => $id]);
             $this->warn('Participant record could not be hashed. Skipping PDF regeneration.');
 
             return;
@@ -79,7 +79,7 @@ final class GetParticipantRecordById extends Command
         // Queue the pdf generation job
         $this->info('Queuing PDF regeneration');
         dispatch(new GenerateParticipantPdfJob($participantData));
-        Log::info('Participant PDF generation queued.', ['participant_id' => (string) $id]);
+        Log::info('Participant PDF generation queued.', ['participant_id' => $id]);
         $this->info('Participant processing queued.');
     }
 }

@@ -52,6 +52,20 @@ return [
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#send_default_pii
     'send_default_pii' => env('SENTRY_SEND_DEFAULT_PII', false),
 
+    // Participant records and credentials must not be collected with HTTP or queue payloads.
+    // Set every sensitive option explicitly; omitted data_collection options enable collection.
+    'data_collection' => [
+        'user_info' => false,
+        'cookies' => ['mode' => 'off'],
+        'http_headers' => ['mode' => 'off'],
+        'http_bodies' => [],
+        'url_query_params' => ['mode' => 'off'],
+        'gen_ai' => ['inputs' => false, 'outputs' => false],
+        'database_query_data' => false,
+        'queues' => false,
+        'stack_frame_variables' => false,
+    ],
+
     // @see: https://docs.sentry.io/platforms/php/guides/laravel/configuration/options/#ignore_exceptions
     // 'ignore_exceptions' => [],
 
@@ -75,7 +89,7 @@ return [
         // Capture SQL queries as breadcrumbs
         'sql_queries' => env('SENTRY_BREADCRUMBS_SQL_QUERIES_ENABLED', true),
 
-        // Capture SQL query bindings (parameters) in SQL query breadcrumbs
+        // Ignored while data_collection.database_query_data is configured above
         'sql_bindings' => env('SENTRY_BREADCRUMBS_SQL_BINDINGS_ENABLED', false),
 
         // Capture queue job information as breadcrumbs
@@ -102,7 +116,7 @@ return [
         // Capture SQL queries as spans
         'sql_queries' => env('SENTRY_TRACE_SQL_QUERIES_ENABLED', true),
 
-        // Capture SQL query bindings (parameters) in SQL query spans
+        // Ignored while data_collection.database_query_data is configured above
         'sql_bindings' => env('SENTRY_TRACE_SQL_BINDINGS_ENABLED', false),
 
         // Capture where the SQL query originated from on the SQL query spans
