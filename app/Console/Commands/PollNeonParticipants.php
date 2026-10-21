@@ -34,7 +34,9 @@ final class PollNeonParticipants extends Command
     public function handle(): void
     {
         try {
-            $date = $this->option('date') ? $this->parseDate($this->option('date')) : Date::today('America/Chicago');
+            $dateOption = $this->option('date');
+            throw_if($dateOption !== null && ! is_string($dateOption), InvalidArgumentException::class, 'Invalid date format. Expected Y-m-d, e.g. 2026-06-16');
+            $date = is_string($dateOption) && $dateOption !== '' ? $this->parseDate($dateOption) : Date::today('America/Chicago');
         } catch (InvalidArgumentException $invalidArgumentException) {
             $this->error($invalidArgumentException->getMessage());
 
