@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM ubuntu:24.04 AS runtime
+FROM ubuntu:26.04 AS runtime
 
 LABEL org.opencontainers.image.authors="Open SGF"
 
@@ -14,20 +14,18 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
-        gnupg \
-    && mkdir -p /etc/apt/keyrings \
-    && curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xb8dc7e53946656efbce4c1dd71daeaab4ad4cab6' \
-        | gpg --dearmor -o /etc/apt/keyrings/ppa_ondrej_php.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/ppa_ondrej_php.gpg] https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble main" \
-        > /etc/apt/sources.list.d/ppa_ondrej_php.list \
+    && curl -fsSL https://packages.sury.org/debsuryorg-archive-keyring.deb -o /tmp/debsuryorg-archive-keyring.deb \
+    && dpkg -i /tmp/debsuryorg-archive-keyring.deb \
+    && echo "deb [signed-by=/usr/share/keyrings/debsuryorg-archive-keyring.gpg] https://packages.sury.org/php/ resolute main" \
+        > /etc/apt/sources.list.d/php.list \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         nginx \
         pdftk \
         php8.5-bcmath \
-        php8.5-cli \
+        "php8.5-cli=8.5.12-*" \
         php8.5-curl \
-        php8.5-fpm \
+        "php8.5-fpm=8.5.12-*" \
         php8.5-intl \
         php8.5-mbstring \
         php8.5-mysql \
@@ -37,7 +35,7 @@ RUN apt-get update \
         php8.5-xml \
         php8.5-zip \
         supervisor \
-    && apt-get purge -y --auto-remove curl gnupg \
+    && apt-get purge -y --auto-remove curl \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 FROM runtime AS vendor
