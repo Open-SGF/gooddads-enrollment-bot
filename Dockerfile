@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM php:8.5.12-fpm-bookworm AS runtime
+FROM ubuntu:24.04 AS runtime
 
 LABEL org.opencontainers.image.authors="Open SGF"
 
@@ -10,25 +10,34 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 WORKDIR /var/www/html
 
-COPY --from=ghcr.io/mlocati/php-extension-installer:2 /usr/bin/install-php-extensions /usr/local/bin/
-
 RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xb8dc7e53946656efbce4c1dd71daeaab4ad4cab6' \
+        | gpg --dearmor -o /etc/apt/keyrings/ppa_ondrej_php.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/ppa_ondrej_php.gpg] https://ppa.launchpadcontent.net/ondrej/php/ubuntu noble main" \
+        > /etc/apt/sources.list.d/ppa_ondrej_php.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         nginx \
         pdftk \
+        php8.5-bcmath \
+        "php8.5-cli=8.5.12-*" \
+        php8.5-curl \
+        "php8.5-fpm=8.5.12-*" \
+        php8.5-intl \
+        php8.5-mbstring \
+        php8.5-mysql \
+        php8.5-opentelemetry \
+        php8.5-redis \
+        php8.5-sqlite3 \
+        php8.5-xml \
+        php8.5-zip \
         supervisor \
-    && install-php-extensions \
-        bcmath \
-        intl \
-        mbstring \
-        mysqli \
-        pcntl \
-        pdo_mysql \
-        opentelemetry \
-        redis \
-        pdo_sqlite \
-        zip \
-    && cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini" \
+    && apt-get purge -y --auto-remove curl gnupg \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 FROM runtime AS vendor
@@ -59,7 +68,7 @@ COPY --chmod=755 docker/production/entrypoint /usr/local/bin/entrypoint
 COPY docker/production/healthcheck /usr/local/bin/healthcheck
 COPY docker/production/nginx.conf /etc/nginx/nginx.conf
 COPY docker/production/logging/ /etc/nginx/logging/
-COPY docker/production/php-fpm.conf /usr/local/etc/php-fpm.conf
+COPY docker/production/php-fpm.conf /etc/php/8.5/fpm/php-fpm.conf
 COPY docker/production/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 COPY --from=vendor --chown=www-data:www-data /var/www/html /var/www/html
 
