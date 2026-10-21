@@ -28,6 +28,6 @@ esac
 
 cp "/etc/nginx/logging/$LOG_FORMAT.conf" /tmp/nginx-logging.conf
 
-php8.5 artisan migrate --force --no-interaction
+php artisan migrate --force --no-interaction
 
 exec "$@"
