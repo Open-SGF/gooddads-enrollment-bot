@@ -3,10 +3,10 @@
 declare(strict_types=1);
 
 use App\Jobs\GenerateParticipantPdfJob;
+use App\Models\Participant;
 use App\Models\ParticipantPdfVersion;
 use App\Services\NeonApiService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Queue;
 
@@ -32,12 +32,11 @@ beforeEach(function (): void {
 it('compares only the latest version and queues reversions without duplicating pending work', function (): void {
     $record = resolve(NeonApiService::class)->getFullParticipantRecordsByDate('2026-10-13')['123'];
     $originalHash = hash('sha256', json_encode($record, JSON_THROW_ON_ERROR));
-    DB::table('participant_pdf_histories')->insert(['participant_id' => '123']);
+    Participant::query()->create(['id' => '123']);
     $saveVersion = fn (int $number, string $hash) => ParticipantPdfVersion::query()->create([
         'participant_id' => '123',
         'version' => $number,
         'neon_data_hash' => $hash,
-        'field_hashes' => [],
         'changed_fields' => [],
         'filename' => 'version_'.$number.'.pdf',
     ]);
@@ -65,16 +64,13 @@ it('compares only the latest version and queues reversions without duplicating p
     Queue::assertPushed(GenerateParticipantPdfJob::class, 2);
 });
 
-it('carries the original hash on forced manual regeneration even when it is unchanged', function (): void {
+it('queues manual fetches with the original hash and the same deduplication as polling', function (): void {
     $record = resolve(NeonApiService::class)->buildFullParticipantRecord('123');
     $hash = hash('sha256', json_encode($record, JSON_THROW_ON_ERROR));
 
     $this->artisan('neon:fetch-by-id', ['id' => '123'])->assertSuccessful();
     $this->artisan('neon:fetch-by-id', ['id' => '123'])->assertSuccessful();
 
-    Queue::assertPushed(GenerateParticipantPdfJob::class, 2);
-    foreach (Queue::pushed(GenerateParticipantPdfJob::class) as $job) {
-        expect($job->neonDataHash)->toBe($hash)
-            ->and($job->forceRegeneration)->toBeTrue();
-    }
+    Queue::assertPushed(GenerateParticipantPdfJob::class, 1);
+    Queue::assertPushed(GenerateParticipantPdfJob::class, fn (GenerateParticipantPdfJob $job): bool => $job->neonDataHash === $hash);
 });

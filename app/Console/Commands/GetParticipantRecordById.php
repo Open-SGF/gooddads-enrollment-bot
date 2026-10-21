@@ -58,7 +58,7 @@ final class GetParticipantRecordById extends Command
 
         if ($encodedRecord === false) {
             Log::warning('Participant record could not be hashed.', ['participant_id' => $id]);
-            $this->warn('Participant record could not be hashed. Skipping PDF regeneration.');
+            $this->warn('Participant record could not be hashed. Skipping PDF generation.');
 
             return;
         }
@@ -70,8 +70,8 @@ final class GetParticipantRecordById extends Command
         $participantData = NeonDTOTransformer::transformParticipantData($record);
 
         // Queue the pdf generation job
-        $this->info('Queuing PDF regeneration');
-        dispatch(new GenerateParticipantPdfJob($participantData, $hash, forceRegeneration: true));
+        $this->info('Queuing PDF generation');
+        dispatch(new GenerateParticipantPdfJob($participantData, $hash));
         Log::info('Participant PDF generation queued.', ['participant_id' => $id]);
         $this->info('Participant processing queued.');
     }

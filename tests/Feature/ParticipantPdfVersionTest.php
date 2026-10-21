@@ -12,11 +12,13 @@ use App\DTOs\ParticipantUpdateData;
 use App\DTOs\ServicePlanDTO;
 use App\DTOs\SurveyDTO;
 use App\Mail\IntakeFormMailable;
+use App\Models\Participant;
 use App\Services\ParticipantPdfVersionService;
 use App\Services\PdfIntakeFormService;
 use Exception;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use mikehaertl\tmp\File;
 use Mockery;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
@@ -52,54 +54,53 @@ final class ParticipantPdfVersionTest extends TestCase
         $pdf->shouldReceive('getError')->andReturn('Test PDF tool failure');
     }
 
-    public function test_versions_are_numbered_per_participant_and_store_the_source_hash(): void
+    public function test_versions_store_the_source_hash_and_skip_unchanged_data(): void
     {
         $service = new ParticipantPdfVersionService;
         $pdf = new PdfIntakeFormService;
         $hash = hash('sha256', 'Neon record');
 
-        $jobUuid = '00000000-0000-0000-0000-000000000123';
-        $first = $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid)->version->fresh();
-        $this->assertSame($jobUuid, $first->job_uuid);
+        $first = $service->generate($this->participant(), $pdf, $hash)->version;
         $this->assertNull($service->generate($this->participant(), $pdf, $hash));
-        $this->assertNull($service->generate($this->participant(), $pdf, $hash, jobUuid: '00000000-0000-0000-0000-000000000456'));
-        $second = $service->generate($this->participant(), $pdf, $hash, forceRegeneration: true)->version->fresh();
-        $other = $service->generate($this->participant(id: '456'), $pdf, $hash)->version->fresh();
+        $other = $service->generate($this->participant(id: '456'), $pdf, $hash)->version;
 
-        $this->assertSame([1, 2, 1], [$first->version, $second->version, $other->version]);
+        $this->assertSame([1, 1], [$first->version, $other->version]);
         $this->assertSame($hash, $first->neon_data_hash);
-        $this->assertSame($hash, $second->neon_data_hash);
         $this->assertSame([], $first->changed_fields);
-        $this->assertSame([], $second->changed_fields);
         $this->assertStringContainsString('_Enrollment_v1_', $first->filename);
-        $this->assertStringContainsString('_Enrollment_v2_', $second->filename);
-        $storedHashes = DB::table('participant_pdf_versions')->where('id', $first->id)->value('field_hashes');
-        $this->assertStringNotContainsString($first->field_hashes['email'], $storedHashes);
+        $this->assertDatabaseCount('participants', 2);
+        $this->assertDatabaseCount('participant_pdf_versions', 2);
+        $this->assertFalse(Schema::hasTable('neon_participant_hashes'));
+        $this->assertFalse(Schema::hasColumn('participant_pdf_versions', 'field_hashes'));
 
-        // Automatic retries and queue:retry must not skip delivery after generation commits.
-        $retry = $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid)->version->fresh();
-        $this->assertSame(3, $retry->version);
-        $this->assertSame($jobUuid, $retry->job_uuid);
+        $participant = Participant::query()->findOrFail('123');
+        $storedHashes = DB::table('participants')->where('id', '123')->value('field_hashes');
+        $this->assertNotEmpty($participant->fieldHashes());
+        $this->assertStringNotContainsString($participant->fieldHashes()['email'], $storedHashes);
     }
 
-    public function test_changed_fields_are_saved_without_overwriting_history(): void
+    public function test_changes_and_reversions_create_versions_and_replace_only_the_current_field_hashes(): void
     {
         $service = new ParticipantPdfVersionService;
         $pdf = new PdfIntakeFormService;
         $original = $this->participant();
         $originalHash = hash('sha256', 'original');
         $first = $service->generate($original, $pdf, $originalHash)->version;
+        $originalFieldHashes = Participant::query()->findOrFail('123')->fieldHashes();
+
         $participant = $this->participant(email: 'updated@example.org', children: [new ChildDTO('Alex', '7', '2018-01-01')]);
-        $second = $service->generate($participant, $pdf, hash('sha256', 'updated'))->version->fresh();
-        $third = $service->generate($original, $pdf, $originalHash)->version->fresh();
+        $second = $service->generate($participant, $pdf, hash('sha256', 'updated'))->version;
+        $this->assertNotSame($originalFieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
+        $third = $service->generate($original, $pdf, $originalHash)->version;
 
         $changedFields = ['child_age_1', 'child_dob_1', 'child_name_1', 'email'];
-        $this->assertSame($changedFields, $second->changed_fields);
+        $this->assertSame([1, 2, 3], [$first->version, $second->version, $third->version]);
+        $this->assertSame($changedFields, $second->fresh()->changed_fields);
         $this->assertSame($changedFields, $third->changed_fields);
-        $this->assertSame(3, $third->version);
         $this->assertSame($first->neon_data_hash, $third->neon_data_hash);
         $this->assertSame([], $first->fresh()->changed_fields);
-        $this->assertSame($first->field_hashes, $first->fresh()->field_hashes);
+        $this->assertSame($originalFieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
+        $this->assertDatabaseCount('participants', 1);
         $this->assertDatabaseCount('participant_pdf_versions', 3);
 
         $mail = new IntakeFormMailable($participant, $second);
@@ -109,23 +110,45 @@ final class ParticipantPdfVersionTest extends TestCase
         $mail->assertSeeInHtml('<li>email</li>', escape: false);
     }
 
-    public function test_failed_generation_does_not_consume_a_version(): void
+    public function test_failed_generation_preserves_the_previous_version_and_field_hashes(): void
     {
         $service = new ParticipantPdfVersionService;
-        $participant = $this->participant();
+        $pdf = new PdfIntakeFormService;
+        $service->generate($this->participant(), $pdf, hash('sha256', 'original'));
+        $fieldHashes = Participant::query()->findOrFail('123')->fieldHashes();
+        $updated = $this->participant(email: 'updated@example.org');
+        $hash = hash('sha256', 'updated');
         $this->pdfShouldFail = true;
 
         try {
-            $service->generate($participant, new PdfIntakeFormService, hash('sha256', 'Neon record'));
+            $service->generate($updated, $pdf, $hash);
             $this->fail('Expected PDF generation to fail.');
         } catch (Exception $exception) {
             $this->assertSame('PDF generation failed: Test PDF tool failure', $exception->getMessage());
         }
 
-        $this->assertDatabaseCount('participant_pdf_versions', 0);
+        $this->assertDatabaseCount('participant_pdf_versions', 1);
+        $this->assertSame($fieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
         $this->pdfShouldFail = false;
-        $retry = $service->generate($participant, new PdfIntakeFormService, hash('sha256', 'Neon record'));
-        $this->assertSame(1, $retry->version->version);
+        $retry = $service->generate($updated, $pdf, $hash)->version;
+        $this->assertSame(2, $retry->version);
+        $this->assertSame(['email'], $retry->changed_fields);
+    }
+
+    public function test_the_same_queue_job_can_retry_delivery_after_generation_commits(): void
+    {
+        $service = new ParticipantPdfVersionService;
+        $pdf = new PdfIntakeFormService;
+        $hash = hash('sha256', 'Neon record');
+        $jobUuid = '00000000-0000-0000-0000-000000000123';
+
+        $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid);
+        $retry = $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid)->version;
+
+        $this->assertSame(2, $retry->version);
+        $this->assertSame($jobUuid, $retry->job_uuid);
+        $this->assertSame([], $retry->changed_fields);
+        $this->assertNull($service->generate($this->participant(), $pdf, $hash));
     }
 
     /** @param list<ChildDTO> $children */
