@@ -12,7 +12,7 @@ return new class extends Migration
     {
         Schema::create('participants', function (Blueprint $table): void {
             $table->string('id')->primary();
-            $table->text('field_hashes')->nullable();
+            $table->json('field_hashes')->nullable();
         });
 
         Schema::create('participant_pdf_versions', function (Blueprint $table): void {

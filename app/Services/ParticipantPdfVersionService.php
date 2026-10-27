@@ -9,6 +9,7 @@ use App\DTOs\PdfGenerationResultDTO;
 use App\Models\Participant;
 use App\Models\ParticipantPdfVersion;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
 final class ParticipantPdfVersionService
 {
@@ -32,7 +33,7 @@ final class ParticipantPdfVersionService
 
             $number = ($previous->version ?? 0) + 1;
             $fieldHashes = $this->fieldHashes($participant);
-            $changedFields = $previous instanceof ParticipantPdfVersion
+            $changedFields = $previous instanceof ParticipantPdfVersion && $storedParticipant->field_hashes !== null
                 ? $this->changedFields($storedParticipant->fieldHashes(), $fieldHashes)
                 : [];
 
@@ -55,11 +56,14 @@ final class ParticipantPdfVersionService
     /** @return array<string, string> */
     private function fieldHashes(ParticipantUpdateData $participant): array
     {
+        $key = config('participant_pdf.hash_key');
+        throw_if(! is_string($key) || mb_strlen($key) < 32, RuntimeException::class, 'PARTICIPANT_PDF_HASH_KEY must be set to a secret of at least 32 characters.');
+
         $hashes = [];
         $fields = [...$participant->toPdfArray(), 'firstName' => $participant->firstName, 'lastName' => $participant->lastName];
 
         foreach ($fields as $name => $value) {
-            $hashes[$name] = hash('sha256', json_encode($value, JSON_THROW_ON_ERROR));
+            $hashes[$name] = hash_hmac('sha256', json_encode([$participant->id, $name, $value], JSON_THROW_ON_ERROR), $key);
         }
 
         return $hashes;

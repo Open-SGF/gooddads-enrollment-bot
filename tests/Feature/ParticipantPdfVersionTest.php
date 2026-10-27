@@ -23,6 +23,7 @@ use mikehaertl\tmp\File;
 use Mockery;
 use PHPUnit\Framework\Attributes\PreserveGlobalState;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
+use RuntimeException;
 use Tests\TestCase;
 
 #[RunTestsInSeparateProcesses]
@@ -75,8 +76,12 @@ final class ParticipantPdfVersionTest extends TestCase
 
         $participant = Participant::query()->findOrFail('123');
         $storedHashes = DB::table('participants')->where('id', '123')->value('field_hashes');
-        $this->assertNotEmpty($participant->fieldHashes());
-        $this->assertStringNotContainsString($participant->fieldHashes()['email'], $storedHashes);
+        $expected = hash_hmac('sha256', json_encode(['123', 'email', 'first@example.org'], JSON_THROW_ON_ERROR), config()->string('participant_pdf.hash_key'));
+        $this->assertSame($expected, $participant->fieldHashes()['email']);
+        $this->assertSame($participant->fieldHashes(), json_decode($storedHashes, true, flags: JSON_THROW_ON_ERROR));
+        $this->assertStringNotContainsString('first@example.org', $storedHashes);
+        $this->assertStringNotContainsString(config()->string('participant_pdf.hash_key'), $storedHashes);
+        $this->assertNotSame($expected, Participant::query()->findOrFail('456')->fieldHashes()['email']);
     }
 
     public function test_changes_and_reversions_create_versions_and_replace_only_the_current_field_hashes(): void
@@ -133,6 +138,39 @@ final class ParticipantPdfVersionTest extends TestCase
         $retry = $service->generate($updated, $pdf, $hash)->version;
         $this->assertSame(2, $retry->version);
         $this->assertSame(['email'], $retry->changed_fields);
+    }
+
+    public function test_resetting_fingerprints_allows_a_new_key_and_baseline_without_losing_history(): void
+    {
+        $service = new ParticipantPdfVersionService;
+        $pdf = new PdfIntakeFormService;
+        $service->generate($this->participant(), $pdf, hash('sha256', 'original'));
+        $participant = Participant::query()->findOrFail('123');
+        $originalFieldHashes = $participant->fieldHashes();
+
+        $participant->update(['field_hashes' => null]);
+        config()->set('participant_pdf.hash_key', str_repeat('b', 64));
+        $second = $service->generate($this->participant(), $pdf, hash('sha256', 'updated'))->version;
+
+        $this->assertSame(2, $second->version);
+        $this->assertSame([], $second->changed_fields);
+        $this->assertNotSame($originalFieldHashes['email'], $participant->fresh()->fieldHashes()['email']);
+        $this->assertDatabaseCount('participant_pdf_versions', 2);
+    }
+
+    public function test_generation_requires_a_dedicated_fingerprint_key(): void
+    {
+        config()->set('participant_pdf.hash_key', '');
+
+        try {
+            new ParticipantPdfVersionService()->generate($this->participant(), new PdfIntakeFormService, hash('sha256', 'original'));
+            $this->fail('Expected generation to reject the missing fingerprint key.');
+        } catch (RuntimeException $runtimeException) {
+            $this->assertSame('PARTICIPANT_PDF_HASH_KEY must be set to a secret of at least 32 characters.', $runtimeException->getMessage());
+        }
+
+        $this->assertDatabaseCount('participants', 0);
+        $this->assertDatabaseCount('participant_pdf_versions', 0);
     }
 
     public function test_the_same_queue_job_can_retry_delivery_after_generation_commits(): void

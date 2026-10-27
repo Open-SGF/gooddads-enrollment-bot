@@ -57,6 +57,6 @@ final class Participant extends Model
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['field_hashes' => 'encrypted:array'];
+        return ['field_hashes' => 'array'];
     }
 }
