@@ -30,32 +30,21 @@ Set `MAIL_INTAKE_FORM_RECIPIENTS` to comma-separated email addresses. Leave it e
 
 ## PDF version history
 
-Each successfully generated PDF gets a version number starting at 1 for that participant. Dropbox filenames include `_v1_`, `_v2_`, and so on. Notification emails include the version, filename, and changed field names.
+PDFs are numbered per participant. Filenames include the version; emails list changed fields. Unchanged records are skipped, while reversions create a new version.
 
-The `participants` table stores each participant's Neon ID and one current set of HMAC-SHA256 `field_hashes` as ordinary JSON. Its row also provides the database lock for generation. Each row in `participant_pdf_versions` stores the participant ID, version number, original Neon SHA-256 hash, filename, changed field names, and queue job UUID. Only the participant/version pair is unique; the same hash can appear in multiple versions.
+Field changes use HMAC-SHA256 fingerprints, not saved field values. Fingerprints cannot be decrypted, but someone with the secret and database can test guesses.
 
-Field changes compare the incoming PDF fields from `ParticipantUpdateData::toPdfArray()`, plus `firstName` and `lastName`, with the participant's saved fingerprints. After successful generation, the new fingerprints replace the previous set in the same transaction that saves the version. Historical versions keep their changed-field lists, not copies of the fingerprints or original field values. The first version is a baseline with an empty changed-field list.
+Set `PARTICIPANT_PDF_HASH_KEY` in `.env` to the output of:
 
-Each fingerprint covers the participant ID, field name, and exact PDF field value encoded as a JSON tuple, preserving distinctions such as null versus an empty string. HMAC uses a dedicated `PARTICIPANT_PDF_HASH_KEY`, separate from `APP_KEY`. There is no decryption operation. Database access alone does not let someone test field-value guesses without the HMAC secret; access to both the database and secret does allow guessing predictable values. This applies to field fingerprints only. Filenames still contain participant names, and queued participant data and Dropbox tokens still use reversible encryption.
-
-Set `PARTICIPANT_PDF_HASH_KEY` to an independently generated secret before generating PDFs. Generate a 32-byte random secret locally with `sail php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'` and store it in your `.env` or secret manager, not in the database or source control. All workers must share the same secret. Generation fails rather than using an empty or short key.
-
-To rotate the HMAC secret, stop polling and workers, set `participants.field_hashes` to SQL `NULL` for all participants, and deploy the new secret to every worker. Rebuild Laravel's configuration cache if enabled before restarting workers and polling. The next generated PDF for each participant establishes a new baseline with no reported field changes, while version numbering and history remain intact. Rotating `APP_KEY` alone does not affect these fingerprints.
-
-Read a participant's history in version order with:
-
-```php
-App\Models\ParticipantPdfVersion::query()
-    ->where('participant_id', '123')
-    ->orderBy('version')
-    ->get();
+```bash
+sail php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'
 ```
 
-Polling and manual fetches with `neon:fetch-by-id` use the same hash comparison. Matching the newest generated version is skipped; `A → B → A` produces versions `1 → 2 → 3`. Queue uniqueness deduplicates pending participant/hash jobs, and workers recheck the latest hash under the participant lock. Pollers and workers must share the same cache store.
+Keep it separate from `APP_KEY` and identical across workers.
 
-Generation failures leave the version history and participant fingerprints unchanged. Delivery happens after generation commits, so missing fields or Dropbox/email failures do not remove a generated version. Retrying the job that generated the latest version creates another PDF version and retries delivery even if the hash is unchanged.
+To rotate it, stop polling and workers, set all `participants.field_hashes` to SQL `NULL`, replace the key, refresh cached configuration, and restart. The next generated PDF becomes the comparison baseline without reporting changed fields.
 
-The migration drops the obsolete `neon_participant_hashes` table. Its records cannot reconstruct previous PDFs or field changes, so tracking starts at version 1 without a historical backfill. Before deploying, stop polling and finish pending jobs and resolve failed jobs from the old code, which lack the original Neon hash. Apply the migration before starting new workers and resuming polling.
+Before upgrading, stop polling and resolve old queued/failed jobs. Run migrations before restarting workers.
 
 ## Testing and Linting
 
