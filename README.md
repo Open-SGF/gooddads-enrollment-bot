@@ -21,6 +21,7 @@
 - Start the Docker containers: `sail up -d`
 - Wait for the containers to start up. You can check the status of the containers with `sail ps`
 - Generate a new APP_KEY: `sail artisan key:generate`. This will automatically update the .env file for the APP_KEY value.
+- Set `PARTICIPANT_PDF_HASH_KEY` in `.env` for field-change detection. Generate it with `sail php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'`. Keep it separate from `APP_KEY` and identical across workers.
 - Create the database tables: `sail artisan migrate`
 - Authorize Dropbox uploads by visiting `http://localhost:8080/dropbox/authorize` from the same machine, or your NAS HTTPS hostname for LAN use. `DROPBOX_AUTH_PORT` is published by Docker and reachable on your LAN unless your host firewall/network policy restricts it. Set the Dropbox app callback to the exact URI in `DROPBOX_REDIRECT_URI` and use `https` for any non-local callback.
 
@@ -53,15 +54,15 @@ If you are stuck or Laravel is stuck.
 
 - Run `bash reset-queue.sh` which does the following:
   - Clear configs: `sail artisan config:clear`
-  - Clear cache: `sail artisan cache:clear`
   - Clear routes: `sail artisan route:clear`
   - Regenerate autoloader files: `sail composer dump-autoload`
   - Flush the queue: `sail artisan queue:flush`
   - Clear the queue: `sail artisan queue:clear`
+  - Clear cache: `sail artisan cache:clear`
+  - Clear orphaned database cache locks: `sail artisan cache:clear --locks`
   - Restart the queue: `sail artisan queue:restart`
-  - Clear the hash-table and failed jobs table:
+  - Clear the failed jobs table:
     - Start MySQL terminal: `sail artisan tinker`
-    - Clear hash-table: `DB::table('neon_participant_hashes')->truncate();`
     - Clear failed jobs-table: `DB::table('failed_jobs')->truncate();`
     - Exit MySQL terminal: `exit`
   - Reset the laravel log file (RHEL/Almalinux syntax): `> storage/logs/laravel.log`
