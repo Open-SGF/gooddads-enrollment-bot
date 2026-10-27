@@ -21,30 +21,13 @@
 - Start the Docker containers: `sail up -d`
 - Wait for the containers to start up. You can check the status of the containers with `sail ps`
 - Generate a new APP_KEY: `sail artisan key:generate`. This will automatically update the .env file for the APP_KEY value.
+- Set `PARTICIPANT_PDF_HASH_KEY` in `.env` for field-change detection. Generate it with `sail php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'`. Keep it separate from `APP_KEY` and identical across workers.
 - Create the database tables: `sail artisan migrate`
 - Authorize Dropbox uploads by visiting `http://localhost:8080/dropbox/authorize` from the same machine, or your NAS HTTPS hostname for LAN use. `DROPBOX_AUTH_PORT` is published by Docker and reachable on your LAN unless your host firewall/network policy restricts it. Set the Dropbox app callback to the exact URI in `DROPBOX_REDIRECT_URI` and use `https` for any non-local callback.
 
 ## Completed form email
 
 Set `MAIL_INTAKE_FORM_RECIPIENTS` to comma-separated email addresses. Leave it empty to disable email.
-
-## PDF version history
-
-PDFs are numbered per participant. Filenames include the version; emails list changed fields. Unchanged records are skipped, while reversions create a new version.
-
-Field changes use HMAC-SHA256 fingerprints, not saved field values. Fingerprints cannot be decrypted, but someone with the secret and database can test guesses.
-
-Set `PARTICIPANT_PDF_HASH_KEY` in `.env` to the output of:
-
-```bash
-sail php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'
-```
-
-Keep it separate from `APP_KEY` and identical across workers.
-
-To rotate it, stop polling and workers, set all `participants.field_hashes` to SQL `NULL`, replace the key, refresh cached configuration, and restart. The next generated PDF becomes the comparison baseline without reporting changed fields.
-
-Before upgrading, stop polling and resolve old queued/failed jobs. Run migrations before restarting workers.
 
 ## Testing and Linting
 
