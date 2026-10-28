@@ -49,9 +49,21 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldBeUniq
             'attempt' => $this->job?->attempts(),
         ];
         $started = hrtime(true);
-        $stage = 'pdf.generate';
+        $stage = 'participant.validate';
 
         try {
+            $missingFields = $this->updatedParticipantData->getMissingFields();
+            if ($missingFields !== []) {
+                Span::getCurrent()->addEvent('delivery.blocked', ['reason' => 'missing_fields']);
+                Log::warning('Participant delivery blocked by missing required fields.', [
+                    ...$context,
+                    'missing_fields' => $missingFields,
+                ]);
+
+                return;
+            }
+
+            $stage = 'pdf.generate';
             $span = Globals::tracerProvider()->getTracer('gooddads-enrollment-bot')
                 ->spanBuilder('pdf.generate')->startSpan();
             $scope = $span->activate();
@@ -75,18 +87,6 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldBeUniq
 
             if (! $pdfGenerationResult instanceof PdfGenerationResultDTO) {
                 Log::info('Participant PDF skipped because the latest version has the same Neon hash.', $context);
-
-                return;
-            }
-
-            $stage = 'participant.validate';
-            $missingFields = $this->updatedParticipantData->getMissingFields();
-            if ($missingFields !== []) {
-                Span::getCurrent()->addEvent('delivery.blocked', ['reason' => 'missing_fields']);
-                Log::warning('Participant delivery blocked by missing required fields.', [
-                    ...$context,
-                    'missing_fields' => $missingFields,
-                ]);
 
                 return;
             }
