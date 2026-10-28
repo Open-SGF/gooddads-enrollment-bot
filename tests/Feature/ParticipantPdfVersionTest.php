@@ -173,20 +173,29 @@ final class ParticipantPdfVersionTest extends TestCase
         $this->assertDatabaseCount('participant_pdf_versions', 0);
     }
 
-    public function test_the_same_queue_job_can_retry_delivery_after_generation_commits(): void
+    public function test_a_delivery_retry_reuses_its_version_without_replacing_newer_fingerprints(): void
     {
         $service = new ParticipantPdfVersionService;
         $pdf = new PdfIntakeFormService;
-        $hash = hash('sha256', 'Neon record');
+        $service->generate($this->participant(), $pdf, hash('sha256', 'original'));
+        $updated = $this->participant(email: 'updated@example.org');
+        $hash = hash('sha256', 'updated');
         $jobUuid = '00000000-0000-0000-0000-000000000123';
+        $firstAttempt = $service->generate($updated, $pdf, $hash, jobUuid: $jobUuid);
 
-        $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid);
-        $retry = $service->generate($this->participant(), $pdf, $hash, jobUuid: $jobUuid)->version;
+        $newer = $this->participant(email: 'newest@example.org');
+        $newerHash = hash('sha256', 'newest');
+        $service->generate($newer, $pdf, $newerHash);
+        $latestFieldHashes = Participant::query()->findOrFail('123')->fieldHashes();
+        $retry = $service->generate($updated, $pdf, $hash, jobUuid: $jobUuid);
 
-        $this->assertSame(2, $retry->version);
-        $this->assertSame($jobUuid, $retry->job_uuid);
-        $this->assertSame([], $retry->changed_fields);
-        $this->assertNull($service->generate($this->participant(), $pdf, $hash));
+        $this->assertSame($firstAttempt->version->id, $retry->version->id);
+        $this->assertSame(2, $retry->version->version);
+        $this->assertSame(['email'], $retry->version->changed_fields);
+        $this->assertSame($firstAttempt->filename, $retry->filename);
+        $this->assertSame($latestFieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
+        $this->assertDatabaseCount('participant_pdf_versions', 3);
+        $this->assertNull($service->generate($newer, $pdf, $newerHash));
     }
 
     /** @param list<ChildDTO> $children */
