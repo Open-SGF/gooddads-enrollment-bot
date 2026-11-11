@@ -12,6 +12,7 @@ use App\DTOs\ParticipantUpdateData;
 use App\DTOs\ServicePlanDTO;
 use App\DTOs\SurveyDTO;
 use App\Jobs\GenerateParticipantPdfJob;
+use App\Models\Participant;
 use App\Models\ParticipantPdfVersion;
 use App\Services\DropboxUploadService;
 use App\Services\ParticipantPdfVersionService;
@@ -21,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use mikehaertl\tmp\File;
 use Mockery;
@@ -45,6 +47,13 @@ final class GenerateParticipantPdfJobTest extends TestCase
         if (! defined('PHPUNIT_COMPOSER_INSTALL')) {
             define('PHPUNIT_COMPOSER_INSTALL', dirname(__DIR__, 2).'/vendor/autoload.php');
         }
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config()->set('queue.default', 'database');
     }
 
     public static function recipientLists(): array
@@ -85,8 +94,8 @@ final class GenerateParticipantPdfJobTest extends TestCase
             ->withArgs(fn (string $path, string $bytes, string $mode, bool $autorename): bool => str_contains($path, '/participant-forms/123/Participant_Test_Enrollment_v1_')
                 && str_ends_with($path, '.pdf')
                 && $bytes === $contents
-                && $mode === 'add'
-                && $autorename)
+                && $mode === 'overwrite'
+                && ! $autorename)
             ->andReturn(['path_display' => '/intake.pdf']);
 
         $participant = $this->participant();
@@ -100,6 +109,12 @@ final class GenerateParticipantPdfJobTest extends TestCase
 
         $this->assertSame([], Storage::allFiles());
         $this->assertFileDoesNotExist($tmpFile->getFileName());
+        $this->assertDatabaseCount('jobs', count($valid));
+        $this->assertCount(0, Mail::getSymfonyTransport()->messages());
+        foreach ($valid as $recipient) {
+            Queue::pop()->fire();
+        }
+
         $messages = Mail::getSymfonyTransport()->messages();
         $this->assertCount(count($valid), $messages);
 
@@ -141,21 +156,27 @@ final class GenerateParticipantPdfJobTest extends TestCase
 
         $this->assertDatabaseCount('participants', 0);
         $this->assertDatabaseCount('participant_pdf_versions', 0);
+        $this->assertDatabaseCount('jobs', 0);
         Mail::assertNothingSent();
     }
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
-    public function test_email_failure_retries_the_original_version_filename_and_changed_fields(): void
+    public function test_upload_retries_keep_the_version_and_email_retries_only_send_email(): void
     {
         config()->set('mail.default', 'array');
         config()->set('mail.from.address', 'sender@example.org');
-        config()->set('mail.intake_form_recipients', ['intake@example.org']);
+        config()->set('mail.intake_form_recipients', ['intake@example.org', 'enrollment@example.net']);
         $this->travelTo(now()->startOfMinute());
 
+        $generations = 0;
         $pdf = Mockery::mock('overload:mikehaertl\\pdftk\\Pdf');
         $pdf->shouldReceive('fillForm', 'flatten')->andReturnSelf();
-        $pdf->shouldReceive('execute')->andReturnTrue();
+        $pdf->shouldReceive('execute')->andReturnUsing(function () use (&$generations): bool {
+            $generations++;
+
+            return true;
+        });
         $pdf->shouldReceive('getTmpFile')->andReturnUsing(fn (): File => new File('%PDF-1.4 retry test', '.pdf'));
 
         $service = new ParticipantPdfVersionService;
@@ -163,15 +184,13 @@ final class GenerateParticipantPdfJobTest extends TestCase
 
         $paths = [];
         $client = Mockery::mock(Client::class);
-        $client->shouldReceive('upload')->twice()->withArgs(function (string $path) use (&$paths): bool {
+        $client->shouldReceive('upload')->twice()->andReturnUsing(function (string $path, string $contents, string $mode, bool $autorename) use (&$paths): array {
             $paths[] = $path;
+            $this->assertSame('overwrite', $mode);
+            $this->assertFalse($autorename);
+            throw_if(count($paths) === 1, RuntimeException::class, 'Test Dropbox failure.');
 
-            return str_contains($path, '_Enrollment_v2_');
-        })->andReturn(['path_display' => '/intake.pdf']);
-
-        $failEmail = true;
-        Event::listen(MessageSending::class, function () use (&$failEmail): void {
-            throw_if($failEmail, RuntimeException::class, 'Test SMTP failure.');
+            return ['path_display' => $path];
         });
         $queuedJob = Mockery::mock(Job::class);
         $queuedJob->shouldReceive('uuid')->andReturn('00000000-0000-0000-0000-000000000123');
@@ -181,26 +200,55 @@ final class GenerateParticipantPdfJobTest extends TestCase
 
         try {
             $job->handle(new PdfIntakeFormService, new DropboxUploadService($client), $service);
-            $this->fail('Expected the first email attempt to fail.');
+            $this->fail('Expected the first upload attempt to fail.');
         } catch (RuntimeException $runtimeException) {
-            $this->assertSame('Test SMTP failure.', $runtimeException->getMessage());
+            $this->assertSame('Test Dropbox failure.', $runtimeException->getMessage());
         }
 
         $originalVersion = ParticipantPdfVersion::query()->where('version', 2)->firstOrFail();
+        $fieldHashes = Participant::query()->findOrFail('123')->fieldHashes();
+        $this->assertDatabaseCount('jobs', 0);
         $this->travel(1)->minutes();
-        $failEmail = false;
         $job->handle(new PdfIntakeFormService, new DropboxUploadService($client), $service);
-
-        $this->assertDatabaseCount('participant_pdf_versions', 2);
-        $this->assertSame(['email'], $originalVersion->fresh()->changed_fields);
         $this->assertSame($paths[0], $paths[1]);
         $this->assertStringEndsWith($originalVersion->filename, $paths[1]);
+        $this->assertDatabaseCount('jobs', 2);
+        $this->assertCount(0, Mail::getSymfonyTransport()->messages());
+
+        $failEmail = true;
+        Event::listen(MessageSending::class, function () use (&$failEmail): void {
+            throw_if($failEmail, RuntimeException::class, 'Test SMTP failure.');
+        });
+        $firstEmail = Queue::pop();
+        try {
+            $firstEmail->fire();
+            $this->fail('Expected the first email attempt to fail.');
+        } catch (RuntimeException $runtimeException) {
+            $this->assertSame('Test SMTP failure.', $runtimeException->getMessage());
+            $firstEmail->release(0);
+        }
+
+        // The other recipient can finish before the failed email retries.
+        $failEmail = false;
+        Queue::pop()->fire();
+        Queue::pop()->fire();
+
+        $this->assertSame(3, $generations);
+        $this->assertDatabaseCount('jobs', 0);
+        $this->assertDatabaseCount('participant_pdf_versions', 2);
+        $this->assertSame(['email'], $originalVersion->fresh()->changed_fields);
+        $this->assertSame($fieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
         $messages = Mail::getSymfonyTransport()->messages();
-        $this->assertCount(1, $messages);
-        $message = $messages->first()->getOriginalMessage();
-        $this->assertSame('Intake Form for Test Participant (v2)', $message->getSubject());
-        $this->assertStringContainsString('<li>email</li>', $message->getHtmlBody());
-        $this->assertStringNotContainsString('No PDF fields changed', $message->getHtmlBody());
+        $this->assertCount(2, $messages);
+        $recipients = [];
+        foreach ($messages as $sent) {
+            $message = $sent->getOriginalMessage();
+            $recipients[] = $message->getTo()[0]->getAddress();
+            $this->assertSame('Intake Form for Test Participant (v2)', $message->getSubject());
+            $this->assertStringContainsString('<li>email</li>', $message->getHtmlBody());
+        }
+
+        $this->assertSame(['enrollment@example.net', 'intake@example.org'], $recipients);
     }
 
     private function participant(string $dob = 'Test', string $email = 'first@example.org'): ParticipantUpdateData

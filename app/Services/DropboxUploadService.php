@@ -27,7 +27,7 @@ final readonly class DropboxUploadService
      * @param  string  $dropboxPath  Destination path in Dropbox (e.g., "participant-forms/123/file.pdf")
      * @return array<mixed>
      */
-    public function upload(string $contents, string $dropboxPath): array
+    public function upload(string $contents, string $dropboxPath, bool $overwrite = false): array
     {
         if ($contents === '') {
             Log::error('Dropbox upload failed: empty PDF contents.');
@@ -43,8 +43,8 @@ final readonly class DropboxUploadService
         $metadata = $this->dropboxClient->upload(
             $fullDropboxPath,
             $contents,
-            mode: 'add',
-            autorename: true,
+            mode: $overwrite ? 'overwrite' : 'add',
+            autorename: ! $overwrite,
         );
 
         Log::info('Dropbox upload succeeded.', [
