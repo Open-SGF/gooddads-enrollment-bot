@@ -23,11 +23,21 @@ final class ParticipantPdfVersionService
             // Lock one row per participant, including their first generation.
             DB::table('participants')->upsert([['id' => $participant->id]], ['id'], ['id']);
             $storedParticipant = Participant::query()->whereKey($participant->id)->lockForUpdate()->firstOrFail();
-            $previous = $storedParticipant->pdfVersions()->orderByDesc('version')->first();
+            $existing = $jobUuid !== null
+                ? $storedParticipant->pdfVersions()->where('job_uuid', $jobUuid)->orderBy('version')->first()
+                : null;
 
-            // Retry delivery for the job that generated the latest PDF, even if its hash matches.
-            $retrying = $jobUuid !== null && $previous?->job_uuid === $jobUuid;
-            if ($previous?->neon_data_hash === $neonDataHash && ! $retrying) {
+            // Recreate the PDF bytes for delivery without advancing the version or fingerprints.
+            if ($existing instanceof ParticipantPdfVersion) {
+                $result = $pdfService->generate($participant, $existing->version);
+                $result->filename = (string) $existing->filename;
+                $result->version = $existing;
+
+                return $result;
+            }
+
+            $previous = $storedParticipant->pdfVersions()->orderByDesc('version')->first();
+            if ($previous?->neon_data_hash === $neonDataHash) {
                 return null;
             }
 

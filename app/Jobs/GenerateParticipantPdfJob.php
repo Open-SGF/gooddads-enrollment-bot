@@ -10,13 +10,14 @@ use App\Mail\IntakeFormMailable;
 use App\Services\DropboxUploadService;
 use App\Services\ParticipantPdfVersionService;
 use App\Services\PdfIntakeFormService;
-use GuzzleHttp\Exception\RequestException;
 use Illuminate\Contracts\Queue\ShouldBeEncrypted;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use LogicException;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\Span;
 use OpenTelemetry\API\Trace\StatusCode;
@@ -49,9 +50,21 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldBeUniq
             'attempt' => $this->job?->attempts(),
         ];
         $started = hrtime(true);
-        $stage = 'pdf.generate';
+        $stage = 'participant.validate';
 
         try {
+            $missingFields = $this->updatedParticipantData->getMissingFields();
+            if ($missingFields !== []) {
+                Span::getCurrent()->addEvent('delivery.blocked', ['reason' => 'missing_fields']);
+                Log::warning('Participant delivery blocked by missing required fields.', [
+                    ...$context,
+                    'missing_fields' => $missingFields,
+                ]);
+
+                return;
+            }
+
+            $stage = 'pdf.generate';
             $span = Globals::tracerProvider()->getTracer('gooddads-enrollment-bot')
                 ->spanBuilder('pdf.generate')->startSpan();
             $scope = $span->activate();
@@ -79,69 +92,34 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldBeUniq
                 return;
             }
 
-            $stage = 'participant.validate';
-            $missingFields = $this->updatedParticipantData->getMissingFields();
-            if ($missingFields !== []) {
-                Span::getCurrent()->addEvent('delivery.blocked', ['reason' => 'missing_fields']);
-                Log::warning('Participant delivery blocked by missing required fields.', [
-                    ...$context,
-                    'missing_fields' => $missingFields,
-                ]);
-
-                return;
-            }
-
+            $version = $pdfGenerationResult->version ?? throw new LogicException('Generated PDF is missing its version.');
             $stage = 'dropbox.upload';
-            $dropbox = 'succeeded';
             $dropboxPath = 'participant-forms/'.$this->updatedParticipantData->id.'/'.$pdfGenerationResult->filename;
-            try {
-                $dropboxService->upload($pdfGenerationResult->contents, $dropboxPath);
-            } catch (Throwable $exception) {
-                $dropbox = 'failed';
-                Span::getCurrent()->addEvent('dropbox.upload_failed', ['exception.type' => $exception::class]);
-                Span::getCurrent()->setStatus(StatusCode::STATUS_ERROR);
-                Log::warning('Dropbox upload failed; continuing to email.', [
-                    ...$context,
-                    'exception' => $exception::class,
-                    'status_code' => $exception instanceof RequestException ? $exception->getResponse()?->getStatusCode() : null,
-                ]);
-            }
+            $dropboxService->upload($pdfGenerationResult->contents, $dropboxPath, overwrite: true);
 
-            $sent = 0;
+            $stage = 'email.queue';
+            $queued = 0;
             $skipped = 0;
-            foreach (config()->array('mail.intake_form_recipients') as $index => $recipient) {
-                if (validator(['email' => $recipient], ['email' => 'required|string|email'])->fails()) {
-                    $skipped++;
-                    Span::getCurrent()->addEvent('email.skipped', ['reason' => 'invalid_recipient']);
-                    Log::warning('Skipping PDF email for invalid recipient.', [...$context, 'recipient_index' => $index]);
+            // Keep all recipient inserts together on the application's database queue.
+            DB::transaction(function () use ($version, $context, &$queued, &$skipped): void {
+                foreach (config()->array('mail.intake_form_recipients') as $index => $recipient) {
+                    if (! is_string($recipient) || validator(['email' => $recipient], ['email' => 'required|string|email'])->fails()) {
+                        $skipped++;
+                        Span::getCurrent()->addEvent('email.skipped', ['reason' => 'invalid_recipient']);
+                        Log::warning('Skipping PDF email for invalid recipient.', [...$context, 'recipient_index' => $index]);
 
-                    continue;
+                        continue;
+                    }
+
+                    Mail::to($recipient)->queue(new IntakeFormMailable($this->updatedParticipantData, $version));
+                    $queued++;
                 }
+            });
 
-                $stage = 'email.send';
-                $span = Globals::tracerProvider()->getTracer('gooddads-enrollment-bot')
-                    ->spanBuilder('email.send')->startSpan();
-                $scope = $span->activate();
-
-                try {
-                    Mail::to($recipient)->send(new IntakeFormMailable($this->updatedParticipantData, $pdfGenerationResult->version));
-                    $sent++;
-                } catch (Throwable $exception) {
-                    $span->recordException($exception);
-                    $span->setStatus(StatusCode::STATUS_ERROR);
-
-                    throw $exception;
-                } finally {
-                    $scope->detach();
-                    $span->end();
-                }
-            }
-
-            Log::info('Participant processing completed.', [
+            Log::info('Participant PDF uploaded and email delivery queued.', [
                 ...$context,
-                'pdf' => 'succeeded',
-                'dropbox' => $dropbox,
-                'email_sent' => $sent,
+                'pdf_version' => $version->version,
+                'email_queued' => $queued,
                 'email_skipped' => $skipped,
                 'duration_ms' => (int) ((hrtime(true) - $started) / 1_000_000),
             ]);
