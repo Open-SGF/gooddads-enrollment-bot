@@ -83,7 +83,7 @@ final class NeonDTOTransformer
                 age: match (true) {
                     $ageInYears === null => '',
                     $ageInYears < 1 => 'Under 1',
-                    default => (string) $ageInYears,
+                    default => (string) (int) $ageInYears,
                 },
                 dob: $dob instanceof Carbon ? $dob->format('m/d/Y') : '',
             );
