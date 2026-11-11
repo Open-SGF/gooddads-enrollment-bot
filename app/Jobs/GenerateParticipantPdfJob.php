@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\DTOs\ParticipantUpdateData;
 use App\DTOs\PdfGenerationResultDTO;
+use App\Mail\IntakeFormMailable;
 use App\Services\DropboxUploadService;
 use App\Services\ParticipantPdfVersionService;
 use App\Services\PdfIntakeFormService;
@@ -15,6 +16,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use LogicException;
 use OpenTelemetry\API\Globals;
 use OpenTelemetry\API\Trace\Span;
@@ -109,7 +111,7 @@ final class GenerateParticipantPdfJob implements ShouldBeEncrypted, ShouldBeUniq
                         continue;
                     }
 
-                    dispatch(new SendParticipantPdfEmailJob($this->updatedParticipantData, $version, $recipient, $this->pollId));
+                    Mail::to($recipient)->queue(new IntakeFormMailable($this->updatedParticipantData, $version));
                     $queued++;
                 }
             });
