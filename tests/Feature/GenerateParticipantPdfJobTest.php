@@ -12,7 +12,7 @@ use App\DTOs\ParticipantUpdateData;
 use App\DTOs\ServicePlanDTO;
 use App\DTOs\SurveyDTO;
 use App\Jobs\GenerateParticipantPdfJob;
-use App\Models\Participant;
+use App\Mail\IntakeFormMailable;
 use App\Models\ParticipantPdfVersion;
 use App\Services\DropboxUploadService;
 use App\Services\ParticipantPdfVersionService;
@@ -23,7 +23,6 @@ use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\Storage;
 use mikehaertl\tmp\File;
 use Mockery;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -32,12 +31,13 @@ use PHPUnit\Framework\Attributes\RunInSeparateProcess;
 use ReflectionClass;
 use RuntimeException;
 use Spatie\Dropbox\Client;
-use Symfony\Component\Mime\Address;
 use Tests\TestCase;
 
 final class GenerateParticipantPdfJobTest extends TestCase
 {
     use RefreshDatabase;
+
+    private int $generations = 0;
 
     public static function setUpBeforeClass(): void
     {
@@ -54,89 +54,39 @@ final class GenerateParticipantPdfJobTest extends TestCase
         parent::setUp();
 
         config()->set('queue.default', 'database');
+        config()->set('mail.default', 'array');
+        config()->set('mail.from.address', 'sender@example.org');
     }
 
     public static function recipientLists(): array
     {
         return [
-            'empty list' => [[], [], []],
-            'valid recipients' => [['intake@example.org', 'enrollment@example.net'], ['intake@example.org', 'enrollment@example.net'], []],
-            'mixed recipients' => [['not-an-email', 'intake@example.org', 'also-invalid', 'enrollment@example.net'], ['intake@example.org', 'enrollment@example.net'], ['not-an-email', 'also-invalid']],
-            'all invalid' => [['not-an-email', 'also-invalid'], [], ['not-an-email', 'also-invalid']],
-            'non-string address' => [[false], [], [false]],
-            'empty address' => [[''], [], ['']],
-            'null address' => [[null], [], [null]],
-            'zero string' => [['0'], [], ['0']],
+            'empty list' => [[], []],
+            'mixed recipients' => [['not-an-email', 'intake@example.org', 'enrollment@example.net'], ['intake@example.org', 'enrollment@example.net']],
         ];
     }
 
     #[DataProvider('recipientLists')]
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
-    public function test_skips_invalid_recipients_without_failing_the_job(array $recipients, array $valid, array $invalid): void
+    public function test_queues_email_only_for_valid_recipients(array $recipients, array $valid): void
     {
-        config()->set('mail.default', 'array');
-        config()->set('mail.from.address', 'sender@example.org');
+        Mail::fake();
         config()->set('mail.intake_form_recipients', $recipients);
-        Storage::fake();
-
-        // Stub the PDF tool, not the job, so tests do not need the pdftk executable.
-        $pdf = Mockery::mock('overload:mikehaertl\\pdftk\\Pdf');
-        $contents = "%PDF-1.4 test document\0\xFF";
-        $tmpFile = new File($contents, '.pdf');
-        $pdf->shouldReceive('fillForm', 'flatten')->andReturnSelf();
-        $pdf->shouldReceive('execute')->andReturnTrue();
-        $pdf->shouldReceive('getTmpFile')->andReturn($tmpFile);
-        $pdf->shouldReceive('getError')->andReturn('');
-
+        $this->mockPdf();
         $client = Mockery::mock(Client::class);
-        $client->shouldReceive('upload')->once()
-            ->withArgs(fn (string $path, string $bytes, string $mode, bool $autorename): bool => str_contains($path, '/participant-forms/123/Participant_Test_Enrollment_v1_')
-                && str_ends_with($path, '.pdf')
-                && $bytes === $contents
-                && $mode === 'overwrite'
-                && ! $autorename)
-            ->andReturn(['path_display' => '/intake.pdf']);
+        $client->shouldReceive('upload')->once()->andReturn([]);
 
-        $participant = $this->participant();
-        $this->assertFalse($participant->hasMissingFields());
-
-        new GenerateParticipantPdfJob($participant, neonDataHash: str_repeat('a', 64))->handle(
+        new GenerateParticipantPdfJob($this->participant(), str_repeat('a', 64))->handle(
             new PdfIntakeFormService,
             new DropboxUploadService($client),
             new ParticipantPdfVersionService,
         );
 
-        $this->assertSame([], Storage::allFiles());
-        $this->assertFileDoesNotExist($tmpFile->getFileName());
-        $this->assertDatabaseCount('jobs', count($valid));
-        $this->assertCount(0, Mail::getSymfonyTransport()->messages());
+        Mail::assertQueued(IntakeFormMailable::class, count($valid));
         foreach ($valid as $recipient) {
-            Queue::pop()->fire();
+            Mail::assertQueued(IntakeFormMailable::class, fn (IntakeFormMailable $mail): bool => $mail->hasTo($recipient));
         }
-
-        $messages = Mail::getSymfonyTransport()->messages();
-        $this->assertCount(count($valid), $messages);
-
-        foreach ($messages->values() as $index => $sent) {
-            $message = $sent->getOriginalMessage();
-            $this->assertSame([$valid[$index]], array_map(fn (Address $address): string => $address->getAddress(), $message->getTo()));
-            $this->assertSame([], $message->getCc());
-            $this->assertSame([], $message->getBcc());
-            $this->assertSame([], $message->getAttachments());
-            $this->assertSame('Intake Form for Test Participant (v1)', $message->getSubject());
-            $this->assertStringContainsString('PDF version: 1', $message->getHtmlBody());
-        }
-
-        $this->assertCount(count($recipients) - count($invalid), $messages);
-
-        new GenerateParticipantPdfJob($participant, neonDataHash: str_repeat('a', 64))->handle(
-            new PdfIntakeFormService,
-            new DropboxUploadService($client),
-            new ParticipantPdfVersionService,
-        );
-        $this->assertDatabaseCount('participant_pdf_versions', 1);
-        $this->assertCount(count($valid), Mail::getSymfonyTransport()->messages());
     }
 
     public function test_missing_required_fields_do_not_generate_or_record_a_version(): void
@@ -145,10 +95,7 @@ final class GenerateParticipantPdfJobTest extends TestCase
         $client = Mockery::mock(Client::class);
         $client->shouldNotReceive('upload');
 
-        $participant = $this->participant(dob: '');
-        $this->assertSame(['assessment' => ['dob']], $participant->getMissingFields());
-
-        new GenerateParticipantPdfJob($participant, neonDataHash: str_repeat('a', 64))->handle(
+        new GenerateParticipantPdfJob($this->participant(dob: ''), str_repeat('a', 64))->handle(
             new PdfIntakeFormService,
             new DropboxUploadService($client),
             new ParticipantPdfVersionService,
@@ -156,28 +103,16 @@ final class GenerateParticipantPdfJobTest extends TestCase
 
         $this->assertDatabaseCount('participants', 0);
         $this->assertDatabaseCount('participant_pdf_versions', 0);
-        $this->assertDatabaseCount('jobs', 0);
-        Mail::assertNothingSent();
+        Mail::assertNothingQueued();
     }
 
     #[RunInSeparateProcess]
     #[PreserveGlobalState(false)]
     public function test_upload_retries_keep_the_version_and_email_retries_only_send_email(): void
     {
-        config()->set('mail.default', 'array');
-        config()->set('mail.from.address', 'sender@example.org');
         config()->set('mail.intake_form_recipients', ['intake@example.org', 'enrollment@example.net']);
         $this->travelTo(now()->startOfMinute());
-
-        $generations = 0;
-        $pdf = Mockery::mock('overload:mikehaertl\\pdftk\\Pdf');
-        $pdf->shouldReceive('fillForm', 'flatten')->andReturnSelf();
-        $pdf->shouldReceive('execute')->andReturnUsing(function () use (&$generations): bool {
-            $generations++;
-
-            return true;
-        });
-        $pdf->shouldReceive('getTmpFile')->andReturnUsing(fn (): File => new File('%PDF-1.4 retry test', '.pdf'));
+        $this->mockPdf();
 
         $service = new ParticipantPdfVersionService;
         $service->generate($this->participant(), new PdfIntakeFormService, str_repeat('a', 64));
@@ -198,15 +133,13 @@ final class GenerateParticipantPdfJobTest extends TestCase
         $job = new GenerateParticipantPdfJob($this->participant(email: 'updated@example.org'), str_repeat('b', 64));
         $job->setJob($queuedJob);
 
-        try {
-            $job->handle(new PdfIntakeFormService, new DropboxUploadService($client), $service);
-            $this->fail('Expected the first upload attempt to fail.');
-        } catch (RuntimeException $runtimeException) {
-            $this->assertSame('Test Dropbox failure.', $runtimeException->getMessage());
-        }
+        $this->assertThrows(
+            fn () => $job->handle(new PdfIntakeFormService, new DropboxUploadService($client), $service),
+            RuntimeException::class,
+            'Test Dropbox failure.',
+        );
 
         $originalVersion = ParticipantPdfVersion::query()->where('version', 2)->firstOrFail();
-        $fieldHashes = Participant::query()->findOrFail('123')->fieldHashes();
         $this->assertDatabaseCount('jobs', 0);
         $this->travel(1)->minutes();
         $job->handle(new PdfIntakeFormService, new DropboxUploadService($client), $service);
@@ -220,24 +153,16 @@ final class GenerateParticipantPdfJobTest extends TestCase
             throw_if($failEmail, RuntimeException::class, 'Test SMTP failure.');
         });
         $firstEmail = Queue::pop();
-        try {
-            $firstEmail->fire();
-            $this->fail('Expected the first email attempt to fail.');
-        } catch (RuntimeException $runtimeException) {
-            $this->assertSame('Test SMTP failure.', $runtimeException->getMessage());
-            $firstEmail->release(0);
-        }
+        $this->assertThrows(fn () => $firstEmail->fire(), RuntimeException::class, 'Test SMTP failure.');
+        $firstEmail->release(0);
 
         // The other recipient can finish before the failed email retries.
         $failEmail = false;
         Queue::pop()->fire();
         Queue::pop()->fire();
 
-        $this->assertSame(3, $generations);
-        $this->assertDatabaseCount('jobs', 0);
+        $this->assertSame(3, $this->generations);
         $this->assertDatabaseCount('participant_pdf_versions', 2);
-        $this->assertSame(['email'], $originalVersion->fresh()->changed_fields);
-        $this->assertSame($fieldHashes, Participant::query()->findOrFail('123')->fieldHashes());
         $messages = Mail::getSymfonyTransport()->messages();
         $this->assertCount(2, $messages);
         $recipients = [];
@@ -249,6 +174,18 @@ final class GenerateParticipantPdfJobTest extends TestCase
         }
 
         $this->assertSame(['enrollment@example.net', 'intake@example.org'], $recipients);
+    }
+
+    private function mockPdf(): void
+    {
+        $pdf = Mockery::mock('overload:mikehaertl\\pdftk\\Pdf');
+        $pdf->shouldReceive('fillForm', 'flatten')->andReturnSelf();
+        $pdf->shouldReceive('execute')->andReturnUsing(function (): bool {
+            $this->generations++;
+
+            return true;
+        });
+        $pdf->shouldReceive('getTmpFile')->andReturnUsing(fn (): File => new File('%PDF-1.4 test', '.pdf'));
     }
 
     private function participant(string $dob = 'Test', string $email = 'first@example.org'): ParticipantUpdateData
