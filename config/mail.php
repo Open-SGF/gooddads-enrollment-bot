@@ -57,7 +57,7 @@ return [
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
-            // Check idle connections before SES can reject the next message.
+            // Check for stale SMTP connections before reusing them.
             'ping_threshold' => 9,
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
